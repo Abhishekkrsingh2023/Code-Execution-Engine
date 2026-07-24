@@ -15,6 +15,7 @@ class JobStatus(str, Enum):
 client = redis.Redis(host='localhost', port=6379, decode_responses=True,socket_timeout=None)
 
 QUEUE_NAME = "code:queue"
+SUBMISSION_KEY="submission:"
 DOKCER_IMAGE = {
     "python": "python:3.12-alpine",
     "cpp": "gcc:12.5",
@@ -126,7 +127,7 @@ def main():
             results = {"status": JobStatus.FAILED.value, "output": "", "error": str(e), "time_taken": 0}
 
         # Store the results back in Redis
-        submission_key = f"submission:{data['submission_id']}"
+        submission_key = f"{SUBMISSION_KEY}{data['submission_id']}"
         client.hset(submission_key, mapping=results)
 
         # remove the folder
