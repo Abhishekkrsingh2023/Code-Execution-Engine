@@ -16,11 +16,12 @@ class DockerContainerEngine:
     A class to manage Docker containers for code execution.
     This class provides methods to start a Docker container with specified resource limits and to remove the container after execution.
     """
-    def __init__(self, image_name: str, memory_limit: str = "128m", cpu_limit: str = "0.5",volume_mount: str = None):
+    def __init__(self, image_name: str,volume_mount: str="shared", memory_limit: str = "128m", cpu_limit: str = "0.5"):
         """
         Initialize the DockerContainer instance.
         Args:
             image_name (str): The name of the Docker image to use for code execution (e.g., "code_executor_image").
+            volume_mount (str): The volume mount path for the container (e.g.,"shared","./code").
             memory_limit (str): The memory limit for the container (e.g., "128m", "256m").
             cpu_limit (str): The CPU limit for the container (e.g., "0.5", "1").
         """
@@ -192,67 +193,3 @@ if __name__ == "__main__":
         print(e)
     time.sleep(2)  # Wait for the container to start
     print(container.remove_container())
-    # print(f"Started container with ID: {container_id}")
-    
-    # values = [
-    #     {
-    #         "input": "12345",
-    #         "expected_output": "54321"
-    #     },
-    #     {
-    #         "input": "987654321",
-    #         "expected_output": "123456789"
-    #     },
-    #     {
-    #         "input": "1000",
-    #         "expected_output": "1"
-    #     },
-    #     {
-    #         "input": "12030",
-    #         "expected_output": "3021"
-    #     },
-    #     {
-    #         "input": "5",
-    #         "expected_output": "5"
-    #     },
-    # ]
-    # language = "cpp"
-
-    # if language in ["java", "c", "cpp"]:
-    #     compile_result = container.compile_code(
-    #         language=language,
-    #         folder_name="5a301dbd-299a-4769-a215-2aa36d55f544",
-    #     )
-    #     if compile_result["returncode"] != 0:
-    #         print(f"Compilation failed with error: {compile_result['stderr']}")
-    #     else:
-    #         print("Compilation successful.")
-
-    # results = []
-
-    # for value in values:
-    #     result = container.execute_code(
-    #         language=language,
-    #         input_data=value["input"],
-    #         folder_name="5a301dbd-299a-4769-a215-2aa36d55f544",
-    #     )
-    #     if result["returncode"] != 0:
-    #         results.append({
-    #             "input": value["input"],
-    #             "status": "error",
-    #             "output": result["stderr"],
-    #             "expected_output": value["expected_output"]
-    #         })
-    #         continue
-
-    #     output = result["stdout"].strip()
-
-    #     results.append({
-    #         "input": value["input"],
-    #         "status": "passed" if output == value["expected_output"] else "failed",
-    #         "output": output,
-    #         "expected_output": value["expected_output"]
-    #     })
-    # print(f"Execution results: {results}")
-
-    # container.remove_container()
