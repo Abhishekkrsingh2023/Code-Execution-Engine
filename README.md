@@ -1,5 +1,7 @@
 # ⚡ Code-Execution-Engine
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A scalable, asynchronous remote code execution engine built with **FastAPI**, **Redis**, and **Docker**. Designed for competitive programming platforms and online judges (like LeetCode, Codeforces, or HackerRank), it safely compiles and executes untrusted code in isolated, resource-constrained container sandboxes across multiple programming languages.
 
 ---
@@ -288,3 +290,10 @@ Running untrusted user-submitted code requires rigorous sandboxing:
 
 Developed by **Abhishek** ([@Abhishekkrsingh2023](https://github.com/Abhishekkrsingh2023)).
 - Designed and engineered the architecture, asynchronous pipeline, and the reusable **`DockerContainerEngine`** for sandboxed execution.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
