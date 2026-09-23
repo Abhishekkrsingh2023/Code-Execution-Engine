@@ -7,7 +7,7 @@ from enum import Enum
 
 import redis
 
-from container import DockerContainerEngine
+from .container import DockerContainerEngine
 
 logging.basicConfig(
     level=logging.INFO,
