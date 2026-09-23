@@ -1,195 +1,205 @@
-# starts the container and removes the container after execution
+# Manages Docker containers for sandboxed code execution.
 import subprocess
-import time
 
+LANGUAGES_TO_COMPILE = ["java", "c", "cpp"]
 
-LANGAUGES_TO_COMPILE = ["java", "c", "cpp"]
-DOKCER_IMAGE = {
-    "python": "python:3.12",
-    "cpp": "gcc:12.5",
-    "c": "gcc:12.5",
-    "java": "java:22",
-}
 
 class DockerContainerEngine:
     """
-    A class to manage Docker containers for code execution.
-    This class provides methods to start a Docker container with specified resource limits and to remove the container after execution.
+    Manages a single Docker container for sandboxed code execution.
+
+    Security controls applied to every container:
+    - ``--network none``       No internet access.
+    - ``--memory``             Caps RAM to prevent OOM attacks.
+    - ``--cpus``               Caps CPU time.
+    - ``--pids-limit``         Caps process count — prevents fork bombs.
+    - ``--security-opt no-new-privileges``  Blocks privilege escalation via setuid.
+    - Volume mount scoped to the specific submission directory only —
+      a container cannot read another user's source files.
     """
-    def __init__(self, image_name: str,volume_mount: str="shared", memory_limit: str = "128m", cpu_limit: str = "0.5"):
+
+    def __init__(
+        self,
+        image_name: str,
+        volume_mount: str = "shared",
+        memory_limit: str = "128m",
+        cpu_limit: str = "0.5",
+        pids_limit: int = 50,
+    ):
         """
-        Initialize the DockerContainer instance.
         Args:
-            image_name (str): The name of the Docker image to use for code execution (e.g., "code_executor_image").
-            volume_mount (str): The volume mount path for the container (e.g.,"shared","./code").
-            memory_limit (str): The memory limit for the container (e.g., "128m", "256m").
-            cpu_limit (str): The CPU limit for the container (e.g., "0.5", "1").
+            image_name:   Docker image to use (e.g. ``python:3.12-alpine``).
+            volume_mount: Host-side base directory for code (e.g. ``/opt/app/code``).
+                          The specific submission subfolder is appended in
+                          :meth:`start_container`, so only that folder is mounted.
+            memory_limit: Memory cap (e.g. ``"128m"``).
+            cpu_limit:    CPU cap (e.g. ``"0.5"``).
+            pids_limit:   Maximum number of processes/threads inside the container.
+                          50 is enough for any normal program; prevents fork bombs.
         """
         self.image_name = image_name
         self.memory_limit = memory_limit
         self.cpu_limit = cpu_limit
+        self.pids_limit = pids_limit
         self.volume_mount = volume_mount
-        self.container_id = None
+        self.container_id: str | None = None
 
-    def _get_command_to_compile(self, language: str, folder_name: str) -> list:
-        """
-        Get the command to compile the code based on the programming language.
-        Args:
-            language (str): The programming language of the code snippet.
-            folder_name (str): The name of the folder where the code will be executed.
-            file_name (str): The name of the file containing the code.
+    # ── Private helpers ──────────────────────────────────────────────────────
 
-        Returns:
-            list: The command to compile the code.
-        """
+    def _get_command_to_compile(self, language: str, folder_name: str) -> list[str]:
+        """Return the ``docker exec`` argv list to compile the code."""
         if language == "java":
-            return ["docker", "exec", "-i", f"{self.container_id}", "javac", f"/shared/{folder_name}/Main.java"]
+            return ["docker", "exec", "-i", self.container_id, "javac", f"/shared/{folder_name}/Main.java"]
         elif language == "cpp":
-            return ["docker", "exec", "-i", f"{self.container_id}", "g++", f"/shared/{folder_name}/Main.cpp", "-o", f"/shared/{folder_name}/a.out"]
+            return [
+                "docker", "exec", "-i", self.container_id,
+                "g++", f"/shared/{folder_name}/Main.cpp", "-o", f"/shared/{folder_name}/a.out",
+            ]
         elif language == "c":
-            return ["docker", "exec", "-i", f"{self.container_id}", "gcc", f"/shared/{folder_name}/Main.c", "-o", f"/shared/{folder_name}/a.out"]
+            return [
+                "docker", "exec", "-i", self.container_id,
+                "gcc", f"/shared/{folder_name}/Main.c", "-o", f"/shared/{folder_name}/a.out",
+            ]
         else:
             raise ValueError(f"Unsupported language for compilation: {language}")
-        
-    def _get_command_to_execute(self, language: str, folder_name: str) -> list:
-        """
-        Get the command to execute the code based on the programming language.
-        Args:
-            language (str): The programming language of the code snippet.
-            folder_name (str): The name of the folder where the code will be executed.
-            file_name (str): The name of the file containing the code.
 
-        Returns:
-            list: The command to execute the code.
-        """
+    def _get_command_to_execute(self, language: str, folder_name: str) -> list[str]:
+        """Return the ``docker exec`` argv list to run the compiled/interpreted code."""
         if language == "java":
-            return ["docker", "exec", "-i", f"{self.container_id}", "java", "-cp", f"/shared/{folder_name}", 'Main']
+            return ["docker", "exec", "-i", self.container_id, "java", "-cp", f"/shared/{folder_name}", "Main"]
         elif language in ["c", "cpp"]:
-            return ["docker", "exec", "-i", f"{self.container_id}", f"/shared/{folder_name}/a.out"]
+            return ["docker", "exec", "-i", self.container_id, f"/shared/{folder_name}/a.out"]
         elif language == "python":
-            return ["docker", "exec", "-i", f"{self.container_id}", "python", f"/shared/{folder_name}/Main.py"]
+            return ["docker", "exec", "-i", self.container_id, "python", f"/shared/{folder_name}/Main.py"]
         else:
             raise ValueError(f"Unsupported language for execution: {language}")
-        
-    def start_container(self) -> str:
+
+    def _return_format(
+        self,
+        stdout: str,
+        stderr: str,
+        returncode: int,
+        compiled: bool | None = None,
+    ) -> dict:
+        base = {"stdout": stdout, "stderr": stderr, "returncode": returncode}
+        if compiled is not None:
+            base["compiled"] = compiled
+        return base
+
+    # ── Public interface ─────────────────────────────────────────────────────
+
+    def start_container(self, folder_name: str) -> str:
         """
-        Start a Docker container to execute the code.
+        Start a long-running ``sleep infinity`` container with the submission's
+        source directory mounted read-write at ``/shared/<folder_name>``.
+
+        Only the specific submission subfolder is mounted — containers cannot
+        access each other's source files.
+
+        Args:
+            folder_name: The submission ID; used to scope the volume mount.
+
         Returns:
-            str: The ID of the started container.
+            The full container ID string.
         """
         try:
             command = [
-                "docker",
-                "run",
-                "-d",
-                "--network", "none",
-                "--memory", self.memory_limit,
-                "--cpus", self.cpu_limit,
+                "docker", "run", "-d",
+                "--network",      "none",
+                "--memory",       self.memory_limit,
+                "--cpus",         self.cpu_limit,
+                # Security: cap process count to defeat fork bombs
+                "--pids-limit",   str(self.pids_limit),
+                # Security: block setuid / capability escalation
+                "--security-opt", "no-new-privileges",
             ]
 
-            if self.volume_mount:
-                command.extend([
-                    "-v",
-                    f"{self.volume_mount}:/shared"
-                ])
-            command.extend([
-                self.image_name,
-                "sleep",
-                "infinity"
-            ])
+            if self.volume_mount and folder_name:
+                # Mount ONLY this submission's subdirectory, not the entire
+                # shared code root, so containers are isolated from each other.
+                host_path = f"{self.volume_mount}/{folder_name}"
+                container_path = f"/shared/{folder_name}"
+                command.extend(["-v", f"{host_path}:{container_path}"])
+
+            command.extend([self.image_name, "sleep", "infinity"])
 
             self.container_id = subprocess.check_output(command, text=True).strip()
             return self.container_id
-        
+
         except Exception as e:
             raise RuntimeError(f"Failed to start Docker container: {e}")
 
-        
-    def _return_format(self, stdout: str, stderr: str, returncode: int, compiled: bool | None=None) -> dict:
-        if compiled is not None:
-            return {
-                "stdout": stdout,
-                "stderr": stderr,
-                "returncode": returncode,
-                "compiled": compiled
-            }
-        return {
-            "stdout": stdout,
-            "stderr": stderr,
-            "returncode": returncode
-        }
-
     def remove_container(self) -> None:
-        """
-        Remove the Docker container.
-        """
+        """Force-remove the container. Safe to call even if already removed."""
         if self.container_id:
             try:
-                result = subprocess.run(["docker", "rm", "-f", self.container_id], capture_output=True, text=True)
-                return result
+                subprocess.run(
+                    ["docker", "rm", "-f", self.container_id],
+                    capture_output=True,
+                    text=True,
+                )
             except Exception as e:
-                print(f"Error removing container: {e}")
+                print(f"Error removing container {self.container_id}: {e}")
 
     def compile_code(self, language: str, folder_name: str) -> dict:
         """
-        Compile the given code inside the Docker container.
-        """
-        if language not in LANGAUGES_TO_COMPILE:
-            return self._return_format("", f"Compilation not required for language: {language}", 0, compiled=True)
-        
-        compilation_command = self._get_command_to_compile(language, folder_name)
+        Compile the source file inside the container.
 
+        For interpreted languages (Python) this is a no-op and returns
+        ``compiled=True`` immediately.
+        """
+        if language not in LANGUAGES_TO_COMPILE:
+            return self._return_format(
+                "", f"Compilation not required for language: {language}", 0, compiled=True
+            )
+
+        compilation_command = self._get_command_to_compile(language, folder_name)
         try:
             result = subprocess.run(
                 compilation_command,
                 text=True,
-                capture_output=True
+                capture_output=True,
             )
-            return self._return_format(result.stdout, result.stderr, result.returncode, compiled=result.returncode == 0)
-        
+            return self._return_format(
+                result.stdout, result.stderr, result.returncode,
+                compiled=(result.returncode == 0),
+            )
         except Exception as e:
             print(e)
             return self._return_format("", str(e), -1, compiled=False)
-        
 
-    def execute_code(self, language: str, input_data: str,folder_name: str) -> str:
+    def execute_code(self, language: str, input_data: str, folder_name: str, timeout: float = 5.0) -> dict:
         """
-        Execute the given code inside the Docker container.
+        Execute the code inside the container against a single test-case input.
 
         Args:
-            code (str): The code snippet to execute.
-            language (str): The programming language of the code snippet.
-            input_data (str): The input data for the code execution.
-            folder_name (str): The name of the folder where the code will be executed.
-            file_name (str): The name of the file containing the code.
+            language:   Programming language identifier.
+            input_data: stdin to feed the process.
+            folder_name: Submission ID / directory name.
+            timeout:    Wall-clock seconds before the run is killed and a
+                        ``TLE`` (Time Limit Exceeded) result is returned.
+                        This is the only mechanism that prevents infinite loops
+                        from hanging the worker forever.
 
         Returns:
-            str: The output from the code execution.
+            dict with ``stdout``, ``stderr``, and ``returncode``.
+            On TLE, ``returncode`` is 124 (matching the ``timeout(1)`` convention).
         """
-        EXECUTION_COMMANDS = self._get_command_to_execute(language, folder_name)
-
+        execution_command = self._get_command_to_execute(language, folder_name)
         try:
             result = subprocess.run(
-                EXECUTION_COMMANDS,
+                execution_command,
                 input=input_data,
                 text=True,
-                capture_output=True
+                capture_output=True,
+                timeout=timeout,  # ← Critical: kills infinite-loop submissions
             )
-
             return self._return_format(result.stdout, result.stderr, result.returncode)
-        
+
+        except subprocess.TimeoutExpired:
+            # returncode 124 matches the POSIX timeout(1) command convention
+            return self._return_format("", "Time Limit Exceeded", 124)
+
         except Exception as e:
             print(e)
             return self._return_format("", str(e), -1)
-
-
-if __name__ == "__main__":
-    # Example usage
-    container = DockerContainerEngine(image_name="gcc:12.5", memory_limit="128m", cpu_limit="0.5", volume_mount="./code-sample")
-    try:
-        container_id = container.start_container()
-        print(f"Started container with ID: {container_id}")
-    except RuntimeError as e:
-        print(e)
-    time.sleep(2)  # Wait for the container to start
-    print(container.remove_container())

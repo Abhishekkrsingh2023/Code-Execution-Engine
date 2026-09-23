@@ -16,11 +16,12 @@ DATABASE_URL = settings.DATABASE_URL
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,  # Set to True for SQL query logging, useful for debugging
-    pool_size=settings.POOL_SIZE, # (No of concurrent connections to the database)
-    max_overflow=settings.MAX_OVERFLOW, # (No of connections that can be created beyond the pool_size)
-    pool_recycle=settings.POOL_RECYCLE, # (Time in seconds after which a connection is recycled)
-    pool_pre_ping=True,
+    # echo logs every SQL statement — only enable via SQL_ECHO=true in .env, never in production
+    echo=settings.SQL_ECHO,
+    pool_size=settings.POOL_SIZE,       # no. of persistent connections to the database
+    max_overflow=settings.MAX_OVERFLOW, # extra connections allowed beyond pool_size
+    pool_recycle=settings.POOL_RECYCLE, # recycle connections after this many seconds
+    pool_pre_ping=True,                 # verify connections before use (detects stale sockets)
 )
 
 SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession,autoflush=False, expire_on_commit=False)

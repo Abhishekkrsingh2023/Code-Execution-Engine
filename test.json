@@ -1,0 +1,22 @@
+[
+    {'input': '12345', 'status': 'passed', 'output': '54321', 'expected_output': '54321'
+    },
+    {'input': '987654321', 'status': 'passed', 'output': '123456789', 'expected_output': '123456789'
+    },
+    {'input': '1000', 'status': 'passed', 'output': '1', 'expected_output': '1'
+    },
+    {'input': '12030', 'status': 'passed', 'output': '3021', 'expected_output': '3021'
+    },
+    {'input': '5', 'status': 'passed', 'output': '5', 'expected_output': '5'
+    },
+    {'input': '0', 'status': 'passed', 'output': '0', 'expected_output': '0'
+    },
+    {'input': '-123', 'status': 'passed', 'output': '-321', 'expected_output': '-321'
+    },
+    {'input': '-100', 'status': 'passed', 'output': '-1', 'expected_output': '-1'
+    },
+    {'input': '1000000000', 'status': 'passed', 'output': '1', 'expected_output': '1'
+    },
+    {'input': '111111111', 'status': 'passed', 'output': '111111111', 'expected_output': '111111111'
+    }
+]

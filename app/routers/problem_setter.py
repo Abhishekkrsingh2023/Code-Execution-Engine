@@ -10,7 +10,7 @@ AsyncSession. If your project uses a sync Session instead, drop every
 `async`/`await` below and swap AsyncSession for Session — the logic (the
 *order* of checks) doesn't change, only the syntax does.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -129,7 +129,7 @@ async def update_common_template(
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(obj, field, value)
-    obj.updated_at = datetime.now()
+    obj.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -215,7 +215,7 @@ async def update_language_template(
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(obj, field, value)
-    obj.updated_at = datetime.now()
+    obj.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(obj)
     return obj
