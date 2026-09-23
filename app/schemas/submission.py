@@ -10,7 +10,7 @@ class Language(str, Enum):
     python = "python"
 
 def get_uuid():
-    return str(uuid.uuid4())[0:8]  # Return the first 8 characters of the UUID
+    return str(uuid.uuid4())  # full 128-bit UUID — do NOT slice, 8 chars risk collisions at scale
 
 
 class TestCase(BaseModel):
