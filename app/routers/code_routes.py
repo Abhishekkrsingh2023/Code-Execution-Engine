@@ -94,6 +94,6 @@ async def poll_submission(submission_id: str):
     submission_data = await redis_client.hgetall(submission_key)
 
     if not submission_data:
-        return {"error": "Submission not found."}
+        raise HTTPException(status_code=404, detail="Submission not found.")
 
     return submission_data
