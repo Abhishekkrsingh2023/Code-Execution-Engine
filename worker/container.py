@@ -192,7 +192,7 @@ class DockerContainerEngine:
                 input=input_data,
                 text=True,
                 capture_output=True,
-                timeout=timeout,  # ← Critical: kills infinite-loop submissions
+                timeout=timeout,  # Critical: kills infinite-loop submissions
             )
             return self._return_format(result.stdout, result.stderr, result.returncode)
 
