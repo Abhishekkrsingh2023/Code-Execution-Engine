@@ -4,6 +4,7 @@ import shutil
 
 import aiofiles
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from jinja2 import Template
 
 from app.config import settings
@@ -86,6 +87,44 @@ async def submit_code(submission: Submission):
         "message": "Submission received successfully.",
         "submission": submission.model_dump(exclude={"user_code", "test_cases", "main_code"}),
     }
+
+
+@router.get("/stream/{job_id}")
+async def stream_submission(job_id: str):
+    async def event_generator():
+        channel = f"result:{job_id}"
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(channel)          # 1. subscribe FIRST
+        try:
+            saved = await redis_client.get(channel)  # 2. then check stored result
+            if saved:
+                yield f"event: result\ndata: {saved}\n\n"
+                return
+            while True:                          # 3. then wait for publish
+                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15)
+                if msg is None or msg.get("type") != "message":
+                    yield ": keepalive\n\n"
+                    continue
+                yield f"event: result\ndata: {msg['data']}\n\n"
+                return                           # 4. close after result
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+            except Exception:
+                pass
+            try:
+                if hasattr(pubsub, "aclose"):
+                    await pubsub.aclose()
+                else:
+                    await pubsub.close()
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/submission/poll/{submission_id}")
