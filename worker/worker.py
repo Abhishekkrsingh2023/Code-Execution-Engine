@@ -228,6 +228,18 @@ def process_jobs(client: redis.Redis) -> None:
         # Persist results back to Redis
         client.hset(submission_key, mapping=results)
 
+        # Build payload matching the polling endpoint's response shape
+        result_dict = client.hgetall(submission_key)
+        if not result_dict:
+            result_dict = {
+                "submission_id": submission_id,
+                "language": data.get("language"),
+                **results,
+            }
+        payload = json.dumps(result_dict)
+        client.set(f"result:{submission_id}", payload, ex=3600)   # durable copy, 1h TTL
+        client.publish(f"result:{submission_id}", payload)        # live notification
+
         # Clean up the submission's source directory from disk
         submission_dir = CODE_BASE / submission_id
         try:

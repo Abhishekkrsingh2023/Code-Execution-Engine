@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.redis_client import get_async_redis_client
 from app.routers import code_routes, problem_setter
 
@@ -10,9 +12,17 @@ app = FastAPI(
     description="An API for executing code submissions against programming problems.",
     version="1.0.0",
     contact={
-        "name": "Abhishek",
-        "email": "abhishek@example.com"
+        "name": "Abhishek Singh",
+        "email": "abhikrsingh.dev@example.com"
     }
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(code_routes.router)

@@ -96,10 +96,13 @@ finally:
     ├──► 5. Compiles code (if C/C++/Java)
     ├──► 6. Evaluates test cases sequentially with stdin/stdout
     ├──► 7. Computes results & execution time
-    ├──► 8. Writes verdict back to Redis (`submission:<id>`)
+    ├──► 8. Writes verdict to Redis (`submission:<id>`), sets durable `result:<id>`, and PUBLISHes
     └──► 9. Teardown container & cleans up host files
-    ▲
-    │ 10. GET /api-v1/code/submission/poll/{id}
+    │
+    ▼
+[ Redis Pub/Sub ] ──► Pushes live event to FastAPI SSE stream
+    │
+    ▼ 10. GET /stream/{id} (Server-Sent Events)
 [ Client ]
 ```
 
@@ -252,7 +255,20 @@ uv run python worker/worker.py
 }
 ```
 
-### 2. Poll Submission Result
+### 2. Stream Submission Result via Server-Sent Events (SSE)
+
+- **Endpoint**: `GET /stream/{job_id}` or `GET /api-v1/code/stream/{job_id}`
+- **Header**: `Accept: text/event-stream`
+- **Behavior**: Client maintains a single HTTP connection. Server pushes `: keepalive` heartbeats and pushes the final verdict the moment execution completes via Redis pub/sub.
+- **SSE Stream Response**:
+```text
+: keepalive
+
+event: result
+data: {"submission_id": "sub_101", "status": "completed", "time_taken": "0.1423", "error": "", "output": "", "results": "[{\"status\": \"passed\", \"output\": \"olleh\", \"error\": \"\"}]"}
+```
+
+### 3. Poll Submission Result (Fallback)
 
 - **Endpoint**: `GET /api-v1/code/submission/poll/{submission_id}`
 - **Response (`200 OK`)**:
@@ -267,7 +283,7 @@ uv run python worker/worker.py
 }
 ```
 
-### 3. Problem Template Management
+### 4. Problem Template Management
 
 - `POST /problem-templates/`: Create problem statement and default test cases.
 - `GET /problem-templates/`: List all problem templates.
