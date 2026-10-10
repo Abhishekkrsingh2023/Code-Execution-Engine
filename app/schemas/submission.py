@@ -2,6 +2,7 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 import uuid
+from typing import List
 
 class Language(str, Enum):
     c = "c"
@@ -19,12 +20,24 @@ class TestCase(BaseModel):
 
 
 class SubmissionRequest(BaseModel):
+    """_summary_
+    This class represents a request to submit code for execution.
+    
+    Attributes:
+        problem_id (str): Unique identifier of the programming problem.
+        submission_id (str): Unique identifier for the submission.
+        problem_name (str): Name of the programming problem.
+        user_code (str): Source code submitted by the user.
+        language (Language): Programming language of the submission.
+        test_cases (List[TestCase]): List of test cases against which the code will be executed
+        time_limit (float): Maximum execution time in seconds, default is 2.0 seconds.
+    """
     problem_id: str = Field(..., description="Unique identifier of the programming problem.")
     submission_id: str = Field(default_factory=get_uuid, description="Unique identifier for the submission.")
     problem_name: str = Field(..., description="Name of the programming problem.")
     user_code: str = Field(..., min_length=1, description="Source code submitted by the user.")
     language: Language = Field(..., description="Programming language of the submission.")
-    test_cases: list[TestCase] = Field(..., min_length=1, description="List of test cases against which the code will be executed.")
+    test_cases: List[TestCase] = Field(..., min_length=1, description="List of test cases against which the code will be executed.")
     time_limit: float = Field(default=2.0, gt=0, description="Maximum execution time in seconds.")
 
     model_config = ConfigDict(
