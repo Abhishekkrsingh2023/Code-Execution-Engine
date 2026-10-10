@@ -108,10 +108,8 @@ class DockerContainerEngine:
                 "--network",      "none",
                 "--memory",       self.memory_limit,
                 "--cpus",         self.cpu_limit,
-                # Security: cap process count to defeat fork bombs
-                "--pids-limit",   str(self.pids_limit),
-                # Security: block setuid / capability escalation
-                "--security-opt", "no-new-privileges",
+                "--pids-limit",   str(self.pids_limit), # Security: cap process count to defeat fork bombs
+                "--security-opt", "no-new-privileges", # Security: block setuid / capability escalation
             ]
 
             if self.volume_mount and folder_name:

@@ -7,7 +7,7 @@ from enum import Enum
 
 import redis
 
-from .container import DockerContainerEngine
+from container import DockerContainerEngine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,7 +62,6 @@ def _make_redis_client() -> redis.Redis:
         socket_timeout=30,           # raise after 30 s of silence
         socket_connect_timeout=10,   # fail fast on initial connect
         socket_keepalive=True,       # OS-level TCP keepalive (detects dropped conns)
-        retry_on_timeout=True,
     )
 
 
