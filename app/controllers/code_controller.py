@@ -1,4 +1,4 @@
-import json
+import orjson
 import pathlib
 import shutil
 import uuid
@@ -43,11 +43,11 @@ async def handle_submit_code_request(submission: SubmissionRequest):
             pipe.hset(submission_key, mapping={
                 "submission_id": submission.submission_id,
                 "language": submission.language,
-                "test_cases": json.dumps([tc.model_dump() for tc in submission.test_cases]),
+                "test_cases": orjson.dumps([tc.model_dump() for tc in submission.test_cases]),
                 "status": "queued",
                 "output": "",
                 "error": "",
-                "results": json.dumps([]),
+                "results": orjson.dumps([]),
                 "time_taken": 0.0,
             })
             pipe.expire(submission_key, 1800)
