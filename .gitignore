@@ -12,7 +12,7 @@ wheels/
 .env
 
 # Frontend
-frontend/
+/frontend/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
