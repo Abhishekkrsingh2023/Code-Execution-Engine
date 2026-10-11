@@ -45,17 +45,3 @@ class SubmissionRequest(BaseModel):
         extra="forbid",
         str_strip_whitespace=True,
     )
-
-class Submission(BaseModel):
-    submission_id: str = Field(default_factory=get_uuid)
-    user_code: str
-    main_code: str
-    language: Language
-    test_cases: list[TestCase] = Field(..., min_length=1, description="List of test cases against which the code will be executed.")
-    time_limit: float = Field(default=2.0, gt=0, description="Maximum execution time in seconds.")
-    
-    model_config = ConfigDict(
-        use_enum_values=True,
-        extra="forbid",
-        str_strip_whitespace=True,
-    )

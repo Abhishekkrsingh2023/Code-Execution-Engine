@@ -1,11 +1,9 @@
 from fastapi import FastAPI
-
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
-from app.redis_client import get_async_redis_client
-from app.routers import code_routes, problem_setter
+from app.routers import code_routes, root_routes
 
-redis_client = get_async_redis_client()
 
 app = FastAPI(
     title="Code Executor API",
@@ -24,23 +22,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,
+    compresslevel=5
+)  # used for data compression for saving bandwidth
 
 app.include_router(code_routes.router)
-app.include_router(problem_setter.router)
-
-@app.get("/ping-redis")
-async def ping_redis():
-    try:
-        pong = await redis_client.ping()
-        if pong:
-            return {"message": "Pong from Redis!"}
-        else:
-            return {"message": "Failed to ping Redis."}
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
+app.include_router(root_routes.router)
 
