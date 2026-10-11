@@ -117,7 +117,7 @@ code-executor/
 │   ├── config.py                  # Global settings (Redis, Database URLs, connection pools)
 │   ├── database.py                # Async SQLAlchemy engine and session setup
 │   ├── main.py                    # FastAPI application entrypoint and health routes
-│   ├── models.py                  # SQLAlchemy models (CommonProblemTemplate, ProblemTemplate)
+│   ├── models/                    # SQLAlchemy models (User, Problem, TestCase, Submission, SubmissionResult)
 │   ├── redis_client.py            # Async Redis connection pool setup
 │   ├── routers/
 │   │   ├── code_routes.py         # Endpoints for code submission and status polling
@@ -130,7 +130,7 @@ code-executor/
 │   └── worker.py                  # Redis worker process consuming code:queue
 ├── alembic/                       # Database migrations
 ├── alembic.ini                    # Alembic configuration
-├── docker-compose.yml             # Local Redis service definition
+├── docker-compose.yml             # Local PostgreSQL & Redis service definitions
 ├── automate.py                    # Script to automate problem creation & templates
 ├── create-folder.py               # Helper utility to scaffold problem directories
 ├── pyproject.toml                 # Project metadata & Python dependencies (uv / pip)
