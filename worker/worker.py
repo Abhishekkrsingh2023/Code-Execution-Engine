@@ -1,4 +1,5 @@
-import json
+# import json
+import orjson # faster JSON serialization/deserialization than the built-in json module
 import pathlib
 import shutil
 import time
@@ -73,7 +74,7 @@ def extract_submission_data(job: str) -> dict:
 
     Returns a dict with: submission_id, test_cases, time_limit, language.
     """
-    job_data = json.loads(job)
+    job_data = orjson.loads(job)
     return {
         "submission_id": job_data.get("submission_id"),
         "language":      job_data.get("language"),
@@ -122,7 +123,7 @@ def compile_and_run_code(submission_data: dict) -> dict:
                 "status":     JobStatus.FAILED.value,
                 "output":     compile_result["stdout"],
                 "error":      compile_result["stderr"],
-                "results":    json.dumps([]),
+                "results":    orjson.dumps([]),
                 "time_taken": 0.0,
             }
 
@@ -170,7 +171,7 @@ def compile_and_run_code(submission_data: dict) -> dict:
             "status":     overall_status.value,
             "output":     "",
             "error":      "",
-            "results":    json.dumps(results),
+            "results":    orjson.dumps(results),
             "time_taken": round(total_time, 4),
         }
 
@@ -220,7 +221,7 @@ def process_jobs(client: redis.Redis) -> None:
                 "status":     JobStatus.FAILED.value,
                 "output":     "",
                 "error":      str(e),
-                "results":    json.dumps([]),   # ← always present so callers don't get KeyError
+                "results":    orjson.dumps([]),   # ← always present so callers don't get KeyError
                 "time_taken": 0.0,
             }
 
@@ -235,7 +236,7 @@ def process_jobs(client: redis.Redis) -> None:
                 "language": data.get("language"),
                 **results,
             }
-        payload = json.dumps(result_dict)
+        payload = orjson.dumps(result_dict)
         client.set(f"result:{submission_id}", payload, ex=3600)   # durable copy, 1h TTL
         client.publish(f"result:{submission_id}", payload)        # live notification
 
