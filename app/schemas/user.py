@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -30,7 +29,7 @@ class UserRegisterRequest(BaseModel):
         description="Unique user email address.",
         examples=["alice@example.com"],
     )
-    password: Optional[str] = Field(
+    password: str | None = Field(
         None,
         min_length=6,
         max_length=128,
@@ -130,7 +129,7 @@ class UserUpdateRequest(BaseModel):
         password (Optional[str]): Updated plaintext password.
         role (Optional[UserRole]): Updated user role.
     """
-    username: Optional[str] = Field(
+    username: str | None = Field(
         None,
         min_length=3,
         max_length=50,
@@ -138,24 +137,24 @@ class UserUpdateRequest(BaseModel):
         description="Updated username handle.",
         examples=["alice_updated"],
     )
-    email: Optional[EmailStr] = Field(
+    email: EmailStr | None = Field(
         None,
         description="Updated email address.",
         examples=["alice_new@example.com"],
     )
-    password: Optional[str] = Field(
+    password: str | None = Field(
         None,
         min_length=6,
         max_length=128,
         description="Updated account password.",
         examples=["NewSecret456!"],
     )
-    role: Optional[UserRole] = Field(
+    role: UserRole | None = Field(
         None,
         description="Updated user role.",
         examples=[UserRole.MODERATOR],
     )
-    is_email_verified: Optional[bool] = Field(
+    is_email_verified: bool | None = Field(
         None,
         description="Updated email verification status.",
         examples=[True],
@@ -236,7 +235,7 @@ class UserListResponse(BaseModel):
     total: int = Field(..., description="Total user records count.")
     skip: int = Field(..., description="Pagination offset.")
     limit: int = Field(..., description="Pagination limit.")
-    users: List[UserResponse] = Field(..., description="List of user profiles.")
+    users: list[UserResponse] = Field(..., description="List of user profiles.")
 
 
 class MessageResponse(BaseModel):

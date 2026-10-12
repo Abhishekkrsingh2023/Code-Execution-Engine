@@ -1,5 +1,4 @@
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,10 +24,10 @@ from app.schemas.user import (
     UserListResponse,
     UserLoginRequest,
     UserLoginResponse,
+    UsernameAvailabilityResponse,
     UserRegisterRequest,
     UserResponse,
     UserUpdateRequest,
-    UsernameAvailabilityResponse,
     VerifyOTPRequest,
 )
 
@@ -190,7 +189,7 @@ async def verify_otp(
 async def list_users(
     skip: int = Query(default=0, ge=0, description="Number of records to skip for pagination."),
     limit: int = Query(default=20, ge=1, le=100, description="Maximum number of records to return."),
-    role: Optional[UserRole] = Query(default=None, description="Optional role filter (user, admin, moderator)."),
+    role: UserRole | None = Query(default=None, description="Optional role filter (user, admin, moderator)."),
     db: AsyncSession = Depends(get_db),
 ) -> UserListResponse:
     """_summary_

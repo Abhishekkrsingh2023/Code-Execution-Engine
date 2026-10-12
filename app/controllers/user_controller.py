@@ -1,8 +1,7 @@
 import re
 import secrets
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from loguru import logger
@@ -17,10 +16,10 @@ from app.schemas.user import (
     UserListResponse,
     UserLoginRequest,
     UserLoginResponse,
+    UsernameAvailabilityResponse,
     UserRegisterRequest,
     UserResponse,
     UserUpdateRequest,
-    UsernameAvailabilityResponse,
     VerifyOTPRequest,
 )
 from app.utils.security import (
@@ -252,7 +251,7 @@ async def handle_verify_otp(
         )
 
     # Check expiration
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if user.otp_expires_at and user.otp_expires_at < now:
         user.otp = None
         user.otp_expires_at = None
@@ -386,7 +385,7 @@ async def handle_check_username_availability(
 async def handle_list_users(
     skip: int,
     limit: int,
-    role: Optional[UserRole],
+    role: UserRole | None,
     db: AsyncSession,
 ) -> UserListResponse:
     """_summary_
