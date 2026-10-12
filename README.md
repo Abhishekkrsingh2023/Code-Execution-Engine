@@ -108,6 +108,158 @@ finally:
 
 ---
 
+## 🗄️ Database Schema & Relationship Model
+
+The platform uses **PostgreSQL** managed through **SQLAlchemy 2.0 (asyncio)** and **Alembic**. All dependency commands and migrations are executed using **`uv`**.
+
+### 1. Entity-Relationship Diagram (ERD)
+
+```mermaid
+erDiagram
+    USERS ||--o{ SUBMISSIONS : "places (1:N)"
+    PROBLEMS ||--o{ TEST_CASES : "defines (1:N)"
+    PROBLEMS ||--o{ SUBMISSIONS : "evaluated_against (1:N)"
+    SUBMISSIONS ||--o{ SUBMISSION_RESULTS : "yields (1:N)"
+    TEST_CASES ||--o{ SUBMISSION_RESULTS : "tested_in (1:N)"
+
+    USERS {
+        UUID id PK
+        string username UK
+        string email UK
+        string password_hash "nullable"
+        string otp "nullable"
+        datetime otp_expires_at "nullable"
+        UserRole role
+        datetime created_at
+    }
+
+    PROBLEMS {
+        int id PK
+        string title
+        text description
+        ProblemDifficulty difficulty
+        float time_limit
+        int memory_limit
+        datetime created_at
+    }
+
+    TEST_CASES {
+        int id PK
+        int problem_id FK
+        text input
+        text expected_output
+        boolean is_sample
+        float weight
+    }
+
+    SUBMISSIONS {
+        UUID id PK
+        UUID user_id FK
+        int problem_id FK
+        SubmissionLanguage language
+        text source_code
+        SubmissionStatus status
+        float execution_time
+        float memory_used
+        datetime created_at
+    }
+
+    SUBMISSION_RESULTS {
+        bigint id PK
+        UUID submission_id FK
+        int test_case_id FK
+        JudgeStatus status
+        float execution_time
+        float memory_used
+    }
+```
+
+---
+
+### 2. Relationship Model & Foreign Keys
+
+| Parent Model | Child Model | Foreign Key | Cardinality | Cascade Rule | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`User`** (`users`) | **`Submission`** (`submissions`) | `submissions.user_id -> users.id` | **1 : N** | `ON DELETE CASCADE` | A user can submit multiple code attempts. Deleting a user purges all their submissions. |
+| **`Problem`** (`problems`) | **`TestCase`** (`test_cases`) | `test_cases.problem_id -> problems.id` | **1 : N** | `ON DELETE CASCADE` | A problem contains multiple test cases. Removing a problem automatically removes all its test cases. |
+| **`Problem`** (`problems`) | **`Submission`** (`submissions`) | `submissions.problem_id -> problems.id` | **1 : N** | `ON DELETE CASCADE` | A problem tracks all submissions attempted against it. |
+| **`Submission`** (`submissions`) | **`SubmissionResult`** (`submission_results`) | `submission_results.submission_id -> submissions.id` | **1 : N** | `ON DELETE CASCADE` | Each submission generates detailed test-case level execution results. |
+| **`TestCase`** (`test_cases`) | **`SubmissionResult`** (`submission_results`) | `submission_results.test_case_id -> test_cases.id` | **1 : N** | `ON DELETE CASCADE` | Individual test case outcomes reference the corresponding test case definition. |
+
+---
+
+### 3. Model Specifications
+
+#### `User` (`users`)
+Stores account credentials, OTP states, and access roles. Supports passwordless email OTP authentication.
+- **`id`** (`UUID`, Primary Key): Universally unique identifier preventing user enumeration.
+- **`username`** (`VARCHAR(50)`, Unique, Indexed): User handle.
+- **`email`** (`VARCHAR(255)`, Unique, Indexed): Verified user email address used for OTP login.
+- **`password_hash`** (`VARCHAR(255)`, Nullable): Optional cryptographic password hash (allows purely passwordless OTP accounts).
+- **`otp`** (`VARCHAR(6)`, Nullable): Active one-time passcode for email verification / authentication.
+- **`otp_expires_at`** (`TIMESTAMPTZ`, Nullable): Expiry timestamp for the active OTP.
+- **`role`** (`ENUM('user', 'admin', 'moderator')`): Authorization role.
+- **`created_at`** (`TIMESTAMPTZ`): Timezone-aware UTC registration timestamp.
+
+#### `Problem` (`problems`)
+Stores coding challenge statements and resource constraints.
+- **`id`** (`INTEGER`, Primary Key, Autoincrement): Unique problem identifier.
+- **`title`** (`VARCHAR(255)`, Indexed): Problem name.
+- **`description`** (`TEXT`): Full markdown problem description and instructions.
+- **`difficulty`** (`ENUM('easy', 'medium', 'hard')`, Indexed): Problem complexity level.
+- **`time_limit`** (`FLOAT`): Execution time limit in seconds.
+- **`memory_limit`** (`INTEGER`): Maximum memory allocation in megabytes (MB).
+- **`created_at`** (`TIMESTAMPTZ`): Timezone-aware UTC creation timestamp.
+
+#### `TestCase` (`test_cases`)
+Stores individual inputs and expected outputs for problem evaluation.
+- **`id`** (`INTEGER`, Primary Key, Autoincrement): Unique test case identifier.
+- **`problem_id`** (`INTEGER`, Foreign Key `problems.id`, Indexed): Associated problem.
+- **`input`** (`TEXT`): Standard input (`stdin`) provided to the program.
+- **`expected_output`** (`TEXT`): Target standard output (`stdout`) expected.
+- **`is_sample`** (`BOOLEAN`): Set to `True` for example test cases visible to the user.
+- **`weight`** (`FLOAT`): Score weight assigned to this test case.
+
+#### `Submission` (`submissions`)
+Records code runs and overall verdicts.
+- **`id`** (`UUID`, Primary Key): Unique submission run identifier.
+- **`user_id`** (`UUID`, Foreign Key `users.id`, Indexed): Submitting user.
+- **`problem_id`** (`INTEGER`, Foreign Key `problems.id`, Indexed): Problem being solved.
+- **`language`** (`ENUM('python', 'cpp', 'c', 'java', 'javascript')`): Programming language.
+- **`source_code`** (`TEXT`): Submitted source code string.
+- **`status`** (`ENUM('pending', 'queued', 'running', 'accepted', 'wrong_answer', 'time_limit_exceeded', 'memory_limit_exceeded', 'compilation_error', 'runtime_error', 'internal_error')`, Indexed): Evaluation verdict.
+- **`execution_time`** (`FLOAT`, Nullable): Total execution duration in seconds.
+- **`memory_used`** (`FLOAT`, Nullable): Peak memory consumed in megabytes (MB).
+- **`created_at`** (`TIMESTAMPTZ`, Indexed): Timezone-aware submission timestamp.
+
+#### `SubmissionResult` (`submission_results`)
+Stores per-testcase execution metrics for a submission.
+- **`id`** (`BIGINT`, Primary Key, Autoincrement): Result identifier.
+- **`submission_id`** (`UUID`, Foreign Key `submissions.id`, Indexed): Parent submission run.
+- **`test_case_id`** (`INTEGER`, Foreign Key `test_cases.id`, Indexed): Evaluated test case.
+- **`status`** (`ENUM('passed', 'failed', 'time_limit_exceeded', 'memory_limit_exceeded', 'runtime_error', 'compilation_error')`): Per-testcase verdict.
+- **`execution_time`** (`FLOAT`, Nullable): Per-testcase execution time in seconds.
+- **`memory_used`** (`FLOAT`, Nullable): Per-testcase peak memory used in MB.
+
+---
+
+### 4. Database Operations with `uv`
+
+All database migrations and inspections are executed via `uv`:
+
+```bash
+# Apply pending migrations
+uv run alembic upgrade head
+
+# Rollback latest migration
+uv run alembic downgrade -1
+
+# Verify schema synchronization between models and PostgreSQL
+uv run alembic check
+```
+
+---
+
 ## 📁 Project Structure
 
 ```text
