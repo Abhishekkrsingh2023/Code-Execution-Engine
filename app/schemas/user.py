@@ -161,6 +161,11 @@ class UserUpdateRequest(BaseModel):
         description="Updated user role.",
         examples=[UserRole.MODERATOR],
     )
+    is_email_verified: Optional[bool] = Field(
+        None,
+        description="Updated email verification status.",
+        examples=[True],
+    )
 
     model_config = ConfigDict(
         use_enum_values=True,
@@ -178,6 +183,7 @@ class UserResponse(BaseModel):
         username (str): User handle.
         email (EmailStr): User email address.
         role (UserRole): Role assigned to user.
+        is_email_verified (bool): Indicates if the user's email has been verified.
         has_password (bool): Indicates if the account has a password set.
         created_at (datetime): Account creation timestamp in UTC.
     """
@@ -185,6 +191,7 @@ class UserResponse(BaseModel):
     username: str = Field(..., description="User handle.")
     email: EmailStr = Field(..., description="User email address.")
     role: UserRole = Field(..., description="Role assigned to user.")
+    is_email_verified: bool = Field(default=False, description="Indicates whether the user's email has been verified.")
     has_password: bool = Field(..., description="Indicates whether the account has a password set.")
     created_at: datetime = Field(..., description="Account creation timestamp in UTC.")
 
@@ -246,3 +253,17 @@ class MessageResponse(BaseModel):
         message (str): Status or confirmation message.
     """
     message: str = Field(..., description="Confirmation message.")
+
+
+class UsernameAvailabilityResponse(BaseModel):
+    """_summary_
+    Response schema for username availability check.
+
+    Attributes:
+        username (str): Target username handle queried.
+        is_available (bool): True if username is available for registration, False if taken.
+        available (bool): Convenience alias for is_available.
+    """
+    username: str = Field(..., description="Target username handle queried.")
+    is_available: bool = Field(..., description="True if the username is available for registration, False if already taken.")
+    available: bool = Field(..., description="Convenience alias reflecting availability.")

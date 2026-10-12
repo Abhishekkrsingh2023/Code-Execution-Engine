@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, Enum as SAEnum, String
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +57,11 @@ class User(Base):
         default=UserRole.USER,
         nullable=False,
     )
+    is_email_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=_utcnow,
@@ -74,4 +79,9 @@ class User(Base):
     def has_password(self) -> bool:
         """Returns True if the user has a password set, False if passwordless/OTP-only."""
         return self.password_hash is not None
+
+    @property
+    def is_verified(self) -> bool:
+        """Returns True if user's email address has been verified."""
+        return self.is_email_verified
 

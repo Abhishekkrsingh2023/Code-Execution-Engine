@@ -130,6 +130,7 @@ erDiagram
         string otp "nullable"
         datetime otp_expires_at "nullable"
         UserRole role
+        boolean is_email_verified
         datetime created_at
     }
 
@@ -191,14 +192,15 @@ erDiagram
 ### 3. Model Specifications
 
 #### `User` (`users`)
-Stores account credentials, OTP states, and access roles. Supports passwordless email OTP authentication.
+Stores account credentials, OTP states, access roles, and email verification status.
 - **`id`** (`UUID`, Primary Key): Universally unique identifier preventing user enumeration.
-- **`username`** (`VARCHAR(50)`, Unique, Indexed): User handle.
-- **`email`** (`VARCHAR(255)`, Unique, Indexed): Verified user email address used for OTP login.
-- **`password_hash`** (`VARCHAR(255)`, Nullable): Optional cryptographic password hash (allows purely passwordless OTP accounts).
+- **`username`** (`VARCHAR(50)`, Unique, Indexed): User handle (mandatory unique name during registration).
+- **`email`** (`VARCHAR(255)`, Unique, Indexed): User email address.
+- **`password_hash`** (`VARCHAR(255)`, Nullable): Optional cryptographic password hash (allows passwordless OTP accounts).
 - **`otp`** (`VARCHAR(6)`, Nullable): Active one-time passcode for email verification / authentication.
 - **`otp_expires_at`** (`TIMESTAMPTZ`, Nullable): Expiry timestamp for the active OTP.
 - **`role`** (`ENUM('user', 'admin', 'moderator')`): Authorization role.
+- **`is_email_verified`** (`BOOLEAN`): Verification flag indicating whether the user's email address has been verified.
 - **`created_at`** (`TIMESTAMPTZ`): Timezone-aware UTC registration timestamp.
 
 #### `Problem` (`problems`)
@@ -450,31 +452,40 @@ data: {"submission_id": "sub_101", "status": "completed", "time_taken": "0.1423"
 
 ### 5. User Management & Authentication (`/api-v1/users`)
 
-The platform supports both traditional password authentication (via Bcrypt) and frictionless passwordless login with 6-digit email OTPs.
+The platform supports both traditional password authentication (via Bcrypt) and email verification / passwordless login with 6-digit email OTPs. Users register with a mandatory unique handle and verify their email via OTP.
 
 | Method | Endpoint | Description | Status |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api-v1/users/register` | Register user account with optional password | `201 Created` |
-| `POST` | `/api-v1/users/login` | Authenticate with email/username and password | `200 OK` |
-| `POST` | `/api-v1/users/otp/request` | Issue 6-digit OTP to email (auto-provisions passwordless user) | `200 OK` |
-| `POST` | `/api-v1/users/otp/verify` | Validate OTP passcode, grant login, and invalidate code | `200 OK` |
+| `POST` | `/api-v1/users/register` | Register user account with mandatory unique username and optional password (dispatches verification OTP) | `201 Created` |
+| `POST` | `/api-v1/users/login` | Authenticate with email/username and password (requires verified email) | `200 OK` |
+| `POST` | `/api-v1/users/otp/request` | Issue 6-digit OTP to registered user for email verification / login | `200 OK` |
+| `POST` | `/api-v1/users/otp/verify` | Validate OTP passcode, mark email verified, grant login, and invalidate code | `200 OK` |
+| `GET` | `/api-v1/users/check-username/{username}` | Check username handle availability (returns `is_available: true/false`) | `200 OK` |
 | `GET` | `/api-v1/users/` | Paginated user profile listing (supports `role` filter, `skip`, `limit`) | `200 OK` |
 | `GET` | `/api-v1/users/{user_id}` | Fetch public user profile by UUID | `200 OK` |
 | `GET` | `/api-v1/users/username/{username}` | Fetch public user profile by handle | `200 OK` |
-| `PATCH` | `/api-v1/users/{user_id}` | Update username, email, password, or role | `200 OK` |
+| `PATCH` | `/api-v1/users/{user_id}` | Update username, email, password, role, or verification status | `200 OK` |
 | `DELETE` | `/api-v1/users/{user_id}` | Delete user account and cascade delete submissions | `200 OK` |
 
-#### Example: Passwordless OTP Authentication Flow
+#### Example: Registration & Email Verification via OTP Flow
 ```bash
-# 1. Request OTP (provisions user account if new)
+# 1. Check if username is available (returns {"username": "bob_coder", "is_available": true, "available": true})
+curl -X GET "http://localhost:8000/api-v1/users/check-username/bob_coder"
+
+# 2. Register user (username is mandatory and unique)
+curl -X POST "http://localhost:8000/api-v1/users/register" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "bob_coder", "email": "bob@example.com", "password": "SecretPassword123"}'
+
+# 3. (Optional) Request a new OTP if needed
 curl -X POST "http://localhost:8000/api-v1/users/otp/request" \
   -H "Content-Type: application/json" \
-  -d '{"email": "alice@example.com"}'
+  -d '{"email": "bob@example.com"}'
 
-# 2. Verify OTP code
+# 3. Verify OTP code (marks is_email_verified = true and authenticates)
 curl -X POST "http://localhost:8000/api-v1/users/otp/verify" \
   -H "Content-Type: application/json" \
-  -d '{"email": "alice@example.com", "otp": "234487"}'
+  -d '{"email": "bob@example.com", "otp": "234487"}'
 ```
 
 

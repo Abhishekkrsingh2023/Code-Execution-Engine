@@ -20,6 +20,7 @@ from app.schemas.user import (
     UserRegisterRequest,
     UserResponse,
     UserUpdateRequest,
+    UsernameAvailabilityResponse,
     VerifyOTPRequest,
 )
 from app.utils.security import (
@@ -30,43 +31,13 @@ from app.utils.security import (
 )
 
 
-async def _generate_unique_username(base_email: str, db: AsyncSession) -> str:
-    """_summary_
-    Helper function to generate a unique username from an email address for passwordless users.
-
-    Args:
-        base_email (str): The email address to extract a username handle from.
-        db (AsyncSession): Active asynchronous database session.
-
-    Returns:
-        str: A sanitized, guaranteed-unique username.
-    """
-    prefix = base_email.split("@")[0]
-    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", prefix)[:35]
-    if len(sanitized) < 3:
-        sanitized = f"user_{sanitized}"
-
-    candidate = sanitized
-    counter = 1
-    while True:
-        stmt = select(User.id).where(User.username == candidate)
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none() is None:
-            return candidate
-        random_suffix = secrets.token_hex(2)
-        candidate = f"{sanitized}_{random_suffix}"
-        counter += 1
-        if counter > 10:
-            candidate = f"user_{secrets.token_hex(4)}"
-
-
 async def handle_register_user(
     payload: UserRegisterRequest,
     db: AsyncSession,
 ) -> UserResponse:
     """_summary_
     Registers a new user account with uniqueness validation for email and username.
-    Supports optional password for passwordless or password-based accounts.
+    Initializes email verification status to unverified and issues an initial verification OTP.
 
     Args:
         payload (UserRegisterRequest): Registration payload containing username, email, optional password and role.
@@ -100,12 +71,17 @@ async def handle_register_user(
         )
 
     password_hash = hash_password(payload.password) if payload.password else None
+    otp_code = generate_otp(6)
+    expiry = get_otp_expiry(minutes=10)
 
     new_user = User(
         username=payload.username,
         email=payload.email,
         password_hash=password_hash,
+        otp=otp_code,
+        otp_expires_at=expiry,
         role=payload.role or UserRole.USER,
+        is_email_verified=False,
     )
 
     try:
@@ -113,6 +89,7 @@ async def handle_register_user(
         await db.commit()
         await db.refresh(new_user)
         logger.info("Successfully registered user '{}' (ID: {})", new_user.username, new_user.id)
+        logger.info("[MOCK EMAIL] Verification OTP for new user {} is: {} (valid for 10 minutes)", new_user.email, otp_code)
         return UserResponse.model_validate(new_user)
     except Exception as exc:
         await db.rollback()
@@ -129,6 +106,7 @@ async def handle_login_user(
 ) -> UserLoginResponse:
     """_summary_
     Authenticates a user using traditional username/email and password credentials.
+    Enforces email verification requirement.
 
     Args:
         payload (UserLoginRequest): Login credentials (username/email and password).
@@ -139,6 +117,7 @@ async def handle_login_user(
 
     Raises:
         HTTPException: 401 if credentials are invalid or password is not set on the account.
+        HTTPException: 403 if user's email has not been verified yet.
     """
     stmt = select(User).where(
         or_(
@@ -163,6 +142,13 @@ async def handle_login_user(
             detail="Invalid credentials.",
         )
 
+    if not user.is_email_verified:
+        logger.warning("Login rejected for unverified user: {}", user.username)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email address is not verified. Please verify your email via OTP before logging in.",
+        )
+
     logger.info("User '{}' authenticated successfully via password", user.username)
     return UserLoginResponse(
         message="Login successful.",
@@ -177,7 +163,7 @@ async def handle_request_otp(
 ) -> OTPResponse:
     """_summary_
     Issues a cryptographically secure 6-digit OTP for email verification / passwordless login.
-    If the email is not yet registered, an account is automatically provisioned for seamless onboarding.
+    Requires an existing registered user account.
 
     Args:
         payload (RequestOTPRequest): Email destination for the OTP.
@@ -187,33 +173,27 @@ async def handle_request_otp(
         OTPResponse: Confirmation with destination email and validity duration.
 
     Raises:
+        HTTPException: 404 if email is not registered.
         HTTPException: 500 on database error.
     """
     stmt = select(User).where(User.email == payload.email)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
+    if user is None:
+        logger.warning("OTP requested for unregistered email: {}", payload.email)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account associated with this email address. Please register first.",
+        )
+
     otp_code = generate_otp(6)
     expiry = get_otp_expiry(minutes=10)
 
     try:
-        if user is None:
-            # Auto-create user for frictionless passwordless registration
-            unique_username = await _generate_unique_username(payload.email, db)
-            user = User(
-                username=unique_username,
-                email=payload.email,
-                password_hash=None,
-                otp=otp_code,
-                otp_expires_at=expiry,
-                role=UserRole.USER,
-            )
-            db.add(user)
-            logger.info("Created new passwordless user '{}' via OTP request", unique_username)
-        else:
-            user.otp = otp_code
-            user.otp_expires_at = expiry
-            logger.info("Updated OTP for existing user '{}'", user.email)
+        user.otp = otp_code
+        user.otp_expires_at = expiry
+        logger.info("Updated OTP for existing user '{}'", user.email)
 
         await db.commit()
         # In production, dispatch email via background worker/SMTP here.
@@ -240,7 +220,7 @@ async def handle_verify_otp(
 ) -> UserLoginResponse:
     """_summary_
     Verifies the provided 6-digit OTP against the user's stored passcode and expiry time.
-    Invalidates the OTP upon successful verification.
+    Marks the user's email as verified and invalidates the OTP upon success.
 
     Args:
         payload (VerifyOTPRequest): Email address and 6-digit OTP.
@@ -291,15 +271,16 @@ async def handle_verify_otp(
             detail="Invalid OTP code.",
         )
 
-    # Valid OTP: Consume and invalidate
+    # Valid OTP: Mark email verified and consume OTP
     user.otp = None
     user.otp_expires_at = None
+    user.is_email_verified = True
     await db.commit()
     await db.refresh(user)
 
     logger.info("User '{}' successfully verified and logged in via OTP", user.email)
     return UserLoginResponse(
-        message="OTP verified successfully. Login granted.",
+        message="OTP verified successfully. Email verified and login granted.",
         user=UserResponse.model_validate(user),
         auth_method="otp",
     )
@@ -363,6 +344,43 @@ async def handle_get_user_by_username(
         )
 
     return UserResponse.model_validate(user)
+
+
+async def handle_check_username_availability(
+    username: str,
+    db: AsyncSession,
+) -> UsernameAvailabilityResponse:
+    """_summary_
+    Checks whether a given username handle is available for new registration.
+    Validates format constraints and tests case-insensitive uniqueness against the database.
+
+    Args:
+        username (str): Target handle to evaluate.
+        db (AsyncSession): Active database session.
+
+    Returns:
+        UsernameAvailabilityResponse: Availability flags and the evaluated username.
+    """
+    clean_username = username.strip()
+
+    # Format check: 3-50 chars and alphanumeric/dash/underscore
+    if not (3 <= len(clean_username) <= 50) or not re.match(r"^[a-zA-Z0-9_-]+$", clean_username):
+        return UsernameAvailabilityResponse(
+            username=clean_username,
+            is_available=False,
+            available=False,
+        )
+
+    # Check case-insensitive uniqueness in the database
+    stmt = select(User.id).where(func.lower(User.username) == func.lower(clean_username))
+    result = await db.execute(stmt)
+    is_taken = result.scalar_one_or_none() is not None
+
+    return UsernameAvailabilityResponse(
+        username=clean_username,
+        is_available=not is_taken,
+        available=not is_taken,
+    )
 
 
 async def handle_list_users(
@@ -460,6 +478,9 @@ async def handle_update_user(
 
     if payload.role is not None:
         user.role = payload.role
+
+    if payload.is_email_verified is not None:
+        user.is_email_verified = payload.is_email_verified
 
     try:
         await db.commit()

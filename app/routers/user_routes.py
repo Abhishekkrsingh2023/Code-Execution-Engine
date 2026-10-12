@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.user_controller import (
+    handle_check_username_availability,
     handle_delete_user,
     handle_get_user_by_id,
     handle_get_user_by_username,
@@ -27,6 +28,7 @@ from app.schemas.user import (
     UserRegisterRequest,
     UserResponse,
     UserUpdateRequest,
+    UsernameAvailabilityResponse,
     VerifyOTPRequest,
 )
 
@@ -41,9 +43,9 @@ router = APIRouter(
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
-    description="Creates a new user profile with unique username and email. Password is optional to allow OTP-only passwordless accounts.",
+    description="Creates a new user profile with a unique username and email. Issues an initial verification OTP. Password is optional.",
     responses={
-        201: {"description": "User created successfully."},
+        201: {"description": "User created successfully with verification OTP issued."},
         409: {"description": "Username or email is already registered."},
         500: {"description": "Internal server error during user creation."},
     },
@@ -54,7 +56,9 @@ async def register_user(
 ) -> UserResponse:
     """_summary_
     This endpoint registers a new user with the platform.
-    It supports traditional password authentication (when password is provided)
+    The user must provide a unique username and email. Upon creation, email verification
+    is initialized to unverified and a 6-digit verification OTP is generated.
+    Supports traditional password authentication (when password is provided)
     or passwordless email-OTP authentication (when password is omitted).
 
     Args:
@@ -76,10 +80,11 @@ async def register_user(
     response_model=UserLoginResponse,
     status_code=status.HTTP_200_OK,
     summary="User login with password",
-    description="Authenticates a user via registered email/username and password.",
+    description="Authenticates a user via registered email/username and password. Enforces verified email address.",
     responses={
         200: {"description": "Login successful."},
         401: {"description": "Invalid credentials or account configured for OTP-only login."},
+        403: {"description": "Email address is not verified. Please verify your email via OTP before logging in."},
     },
 )
 async def login_user(
@@ -88,6 +93,7 @@ async def login_user(
 ) -> UserLoginResponse:
     """_summary_
     This endpoint authenticates an existing user using their username or email alongside their password.
+    Requires the user's email address to be verified.
 
     Args:
         payload (UserLoginRequest): Login request containing username/email and password.
@@ -98,6 +104,7 @@ async def login_user(
 
     Raises:
         HTTPException: 401 if credentials are invalid or if the account does not have a password configured.
+        HTTPException: 403 if the user's email is not verified yet.
     """
     return await handle_login_user(payload, db)
 
@@ -107,9 +114,10 @@ async def login_user(
     response_model=OTPResponse,
     status_code=status.HTTP_200_OK,
     summary="Request a 6-digit OTP",
-    description="Issues a temporary 6-digit OTP sent to the user's email. Seamlessly auto-creates an account if the email is not registered.",
+    description="Issues a temporary 6-digit OTP sent to a registered user's email for email verification or passwordless login.",
     responses={
         200: {"description": "OTP generated and dispatched successfully."},
+        404: {"description": "No account associated with this email address."},
         500: {"description": "Failed to generate OTP."},
     },
 )
@@ -118,9 +126,8 @@ async def request_otp(
     db: AsyncSession = Depends(get_db),
 ) -> OTPResponse:
     """_summary_
-    This endpoint initiates passwordless email OTP authentication.
-    If the email is already registered, an OTP code is generated and attached to the account.
-    If the email is new, a user profile is automatically provisioned and issued an OTP.
+    This endpoint initiates email verification or passwordless login via a 6-digit OTP.
+    The email must already be registered in the system.
 
     Args:
         payload (RequestOTPRequest): Target email address for OTP delivery.
@@ -130,6 +137,7 @@ async def request_otp(
         OTPResponse: Confirmation message, email address, and expiration validity in seconds.
 
     Raises:
+        HTTPException: 404 if the email is not registered.
         HTTPException: 500 if OTP generation or database commit fails.
     """
     return await handle_request_otp(payload, db)
@@ -140,9 +148,9 @@ async def request_otp(
     response_model=UserLoginResponse,
     status_code=status.HTTP_200_OK,
     summary="Verify OTP and login",
-    description="Validates a 6-digit OTP for email verification / passwordless login and invalidates the code upon success.",
+    description="Validates a 6-digit OTP for email verification and passwordless login. Marks email verified and invalidates OTP upon success.",
     responses={
-        200: {"description": "OTP verified successfully. User logged in."},
+        200: {"description": "OTP verified successfully. Email marked verified and user logged in."},
         400: {"description": "OTP code is incorrect, missing, or expired."},
         404: {"description": "No user account found with the specified email."},
     },
@@ -153,7 +161,7 @@ async def verify_otp(
 ) -> UserLoginResponse:
     """_summary_
     This endpoint verifies a 6-digit OTP code submitted by the user.
-    Upon successful validation, the OTP is invalidated and login access is granted.
+    Upon successful validation, the user's email is marked as verified, the OTP is invalidated, and login access is granted.
 
     Args:
         payload (VerifyOTPRequest): Verification payload containing email and 6-digit OTP code.
@@ -230,6 +238,61 @@ async def get_user_by_username(
         HTTPException: 404 if the user cannot be found.
     """
     return await handle_get_user_by_username(username, db)
+
+
+@router.get(
+    "/check-username/{username}",
+    response_model=UsernameAvailabilityResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Check username availability",
+    description="Checks whether a given username handle is available for registration, returning boolean availability flags.",
+    responses={
+        200: {"description": "Username availability status evaluated."},
+    },
+)
+async def check_username_availability(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+) -> UsernameAvailabilityResponse:
+    """_summary_
+    This endpoint evaluates whether a desired username handle is available for new registration.
+    Validates formatting rules and returns true if available, false if already taken or invalid.
+
+    Args:
+        username (str): Desired username handle.
+        db (AsyncSession): Database session injected via dependency.
+
+    Returns:
+        UsernameAvailabilityResponse: Availability flags (is_available and available) and the queried username.
+    """
+    return await handle_check_username_availability(username, db)
+
+
+@router.get(
+    "/check-username",
+    response_model=UsernameAvailabilityResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Check username availability via query parameter",
+    description="Checks whether a username handle provided via query parameter is available for registration.",
+    responses={
+        200: {"description": "Username availability status evaluated."},
+    },
+)
+async def check_username_query(
+    username: str = Query(..., description="Desired username handle to evaluate."),
+    db: AsyncSession = Depends(get_db),
+) -> UsernameAvailabilityResponse:
+    """_summary_
+    This endpoint evaluates username availability via query string (`?username=...`).
+
+    Args:
+        username (str): Desired username handle.
+        db (AsyncSession): Database session injected via dependency.
+
+    Returns:
+        UsernameAvailabilityResponse: Availability flags (is_available and available) and the queried username.
+    """
+    return await handle_check_username_availability(username, db)
 
 
 @router.get(
