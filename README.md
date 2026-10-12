@@ -267,16 +267,22 @@ code-executor/
 ├── app/
 │   ├── code/                      # Ephemeral directory for code execution jobs
 │   ├── config.py                  # Global settings (Redis, Database URLs, connection pools)
+│   ├── controllers/
+│   │   ├── code_controller.py     # Code execution & streaming controller
+│   │   └── user_controller.py     # User registration, OTP authentication & profile controller
 │   ├── database.py                # Async SQLAlchemy engine and session setup
 │   ├── main.py                    # FastAPI application entrypoint and health routes
 │   ├── models/                    # SQLAlchemy models (User, Problem, TestCase, Submission, SubmissionResult)
 │   ├── redis_client.py            # Async Redis connection pool setup
 │   ├── routers/
 │   │   ├── code_routes.py         # Endpoints for code submission and status polling
-│   │   └── problem_setter.py      # CRUD endpoints for problems and templates
-│   └── schemas/
-│       ├── problem.py             # Pydantic schemas for problem templates
-│       └── submission.py          # Pydantic schemas for submissions & test cases
+│   │   ├── root_routes.py         # Health and Redis ping endpoints
+│   │   └── user_routes.py         # REST & auth endpoints for user management
+│   ├── schemas/
+│   │   ├── submission.py          # Pydantic schemas for submissions & test cases
+│   │   └── user.py                # Pydantic schemas for users, auth & OTP
+│   └── utils/
+│       └── security.py            # Bcrypt password hashing & secure OTP generation
 ├── worker/
 │   ├── container.py               # Reusable DockerContainerEngine class
 │   └── worker.py                  # Redis worker process consuming code:queue
@@ -441,6 +447,36 @@ data: {"submission_id": "sub_101", "status": "completed", "time_taken": "0.1423"
 - `GET /problem-templates/`: List all problem templates.
 - `GET /problem-templates/{problem_id}`: Fetch problem statement with all language templates.
 - `POST /problem-templates/{problem_id}/languages/{language}`: Add or update language-specific source templates.
+
+### 5. User Management & Authentication (`/api-v1/users`)
+
+The platform supports both traditional password authentication (via Bcrypt) and frictionless passwordless login with 6-digit email OTPs.
+
+| Method | Endpoint | Description | Status |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api-v1/users/register` | Register user account with optional password | `201 Created` |
+| `POST` | `/api-v1/users/login` | Authenticate with email/username and password | `200 OK` |
+| `POST` | `/api-v1/users/otp/request` | Issue 6-digit OTP to email (auto-provisions passwordless user) | `200 OK` |
+| `POST` | `/api-v1/users/otp/verify` | Validate OTP passcode, grant login, and invalidate code | `200 OK` |
+| `GET` | `/api-v1/users/` | Paginated user profile listing (supports `role` filter, `skip`, `limit`) | `200 OK` |
+| `GET` | `/api-v1/users/{user_id}` | Fetch public user profile by UUID | `200 OK` |
+| `GET` | `/api-v1/users/username/{username}` | Fetch public user profile by handle | `200 OK` |
+| `PATCH` | `/api-v1/users/{user_id}` | Update username, email, password, or role | `200 OK` |
+| `DELETE` | `/api-v1/users/{user_id}` | Delete user account and cascade delete submissions | `200 OK` |
+
+#### Example: Passwordless OTP Authentication Flow
+```bash
+# 1. Request OTP (provisions user account if new)
+curl -X POST "http://localhost:8000/api-v1/users/otp/request" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com"}'
+
+# 2. Verify OTP code
+curl -X POST "http://localhost:8000/api-v1/users/otp/verify" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "otp": "234487"}'
+```
+
 
 ---
 
