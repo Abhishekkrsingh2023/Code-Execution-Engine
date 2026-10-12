@@ -8,7 +8,6 @@ _async_redis_client = redis_async.Redis(
     port=settings.REDIS_PORT,
     decode_responses=True,
     socket_keepalive=True,
-    retry_on_timeout=True,
 )
 
 _redis_sync_client = redis_sync.Redis(
@@ -16,7 +15,6 @@ _redis_sync_client = redis_sync.Redis(
     port=settings.REDIS_PORT,
     decode_responses=True,
     socket_keepalive=True,
-    retry_on_timeout=True,
 )
 
 
