@@ -1,9 +1,10 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, String
+from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,15 +41,15 @@ class User(Base):
         index=True,
         nullable=False,
     )
-    password_hash: Mapped[Optional[str]] = mapped_column(
+    password_hash: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
     )
-    otp: Mapped[Optional[str]] = mapped_column(
+    otp: Mapped[str | None] = mapped_column(
         String(6),
         nullable=True,
     )
-    otp_expires_at: Mapped[Optional[datetime]] = mapped_column(
+    otp_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -69,7 +70,7 @@ class User(Base):
     )
 
     # Relationships
-    submissions: Mapped[List["Submission"]] = relationship(
+    submissions: Mapped[list["Submission"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
