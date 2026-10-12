@@ -16,4 +16,5 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.51",
     "loguru>=0.7.3",
     "orjson>=3.13.0",
+    "bcrypt>=5.0.0",
 ]

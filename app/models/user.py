@@ -69,3 +69,9 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    @property
+    def has_password(self) -> bool:
+        """Returns True if the user has a password set, False if passwordless/OTP-only."""
+        return self.password_hash is not None
+
