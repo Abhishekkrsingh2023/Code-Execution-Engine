@@ -10,12 +10,12 @@ from app.models.user import UserRole
 class UserRegisterRequest(BaseModel):
     """_summary_
     Request schema for registering a new user. Supports optional password for passwordless or password-based accounts.
+    All public registrations default to standard USER role; roles cannot be self-assigned.
 
     Attributes:
         username (str): Unique username handle (3-50 chars).
         email (EmailStr): Unique valid email address.
         password (Optional[str]): Optional password string (min 6 characters).
-        role (Optional[UserRole]): Access role (defaults to UserRole.USER).
     """
     username: str = Field(
         ...,
@@ -37,14 +37,8 @@ class UserRegisterRequest(BaseModel):
         description="Optional plaintext password for traditional authentication. If omitted, user can authenticate via OTP.",
         examples=["SuperSecret123!"],
     )
-    role: Optional[UserRole] = Field(
-        default=UserRole.USER,
-        description="User authorization role (default: user).",
-        examples=[UserRole.USER],
-    )
 
     model_config = ConfigDict(
-        use_enum_values=True,
         extra="forbid",
         str_strip_whitespace=True,
     )

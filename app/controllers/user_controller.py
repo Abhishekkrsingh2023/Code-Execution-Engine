@@ -40,7 +40,7 @@ async def handle_register_user(
     Initializes email verification status to unverified and issues an initial verification OTP.
 
     Args:
-        payload (UserRegisterRequest): Registration payload containing username, email, optional password and role.
+        payload (UserRegisterRequest): Registration payload containing username, email, and optional password.
         db (AsyncSession): Active database session.
 
     Returns:
@@ -80,7 +80,7 @@ async def handle_register_user(
         password_hash=password_hash,
         otp=otp_code,
         otp_expires_at=expiry,
-        role=payload.role or UserRole.USER,
+        role=UserRole.USER,
         is_email_verified=False,
     )
 

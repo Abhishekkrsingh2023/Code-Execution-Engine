@@ -62,7 +62,7 @@ async def register_user(
     or passwordless email-OTP authentication (when password is omitted).
 
     Args:
-        payload (UserRegisterRequest): Registration payload with username, email, optional password, and role.
+        payload (UserRegisterRequest): Registration payload with username, email, and optional password.
         db (AsyncSession): Database session injected via dependency.
 
     Returns:
