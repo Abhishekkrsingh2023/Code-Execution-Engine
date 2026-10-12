@@ -1,0 +1,248 @@
+import uuid
+from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from app.models.user import UserRole
+
+
+class UserRegisterRequest(BaseModel):
+    """_summary_
+    Request schema for registering a new user. Supports optional password for passwordless or password-based accounts.
+
+    Attributes:
+        username (str): Unique username handle (3-50 chars).
+        email (EmailStr): Unique valid email address.
+        password (Optional[str]): Optional password string (min 6 characters).
+        role (Optional[UserRole]): Access role (defaults to UserRole.USER).
+    """
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=50,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+        description="Unique user handle (alphanumeric, underscore, dash).",
+        examples=["alice_dev"],
+    )
+    email: EmailStr = Field(
+        ...,
+        description="Unique user email address.",
+        examples=["alice@example.com"],
+    )
+    password: Optional[str] = Field(
+        None,
+        min_length=6,
+        max_length=128,
+        description="Optional plaintext password for traditional authentication. If omitted, user can authenticate via OTP.",
+        examples=["SuperSecret123!"],
+    )
+    role: Optional[UserRole] = Field(
+        default=UserRole.USER,
+        description="User authorization role (default: user).",
+        examples=[UserRole.USER],
+    )
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+
+class UserLoginRequest(BaseModel):
+    """_summary_
+    Request schema for traditional password-based authentication.
+
+    Attributes:
+        username_or_email (str): Registered username or email.
+        password (str): Account password.
+    """
+    username_or_email: str = Field(
+        ...,
+        min_length=3,
+        max_length=255,
+        description="Registered username or email address.",
+        examples=["alice@example.com"],
+    )
+    password: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Account password.",
+        examples=["SuperSecret123!"],
+    )
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+
+class RequestOTPRequest(BaseModel):
+    """_summary_
+    Request schema to initiate OTP passwordless login / registration.
+
+    Attributes:
+        email (EmailStr): Target user email address for OTP delivery.
+    """
+    email: EmailStr = Field(
+        ...,
+        description="User email address for passwordless OTP login.",
+        examples=["alice@example.com"],
+    )
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+
+class VerifyOTPRequest(BaseModel):
+    """_summary_
+    Request schema for verifying an issued OTP passcode.
+
+    Attributes:
+        email (EmailStr): Target user email address.
+        otp (str): 6-digit numeric verification code.
+    """
+    email: EmailStr = Field(
+        ...,
+        description="User email address.",
+        examples=["alice@example.com"],
+    )
+    otp: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{6}$",
+        description="6-digit numeric OTP code.",
+        examples=["123456"],
+    )
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+
+class UserUpdateRequest(BaseModel):
+    """_summary_
+    Request schema for updating existing user details.
+
+    Attributes:
+        username (Optional[str]): Updated username.
+        email (Optional[EmailStr]): Updated email address.
+        password (Optional[str]): Updated plaintext password.
+        role (Optional[UserRole]): Updated user role.
+    """
+    username: Optional[str] = Field(
+        None,
+        min_length=3,
+        max_length=50,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+        description="Updated username handle.",
+        examples=["alice_updated"],
+    )
+    email: Optional[EmailStr] = Field(
+        None,
+        description="Updated email address.",
+        examples=["alice_new@example.com"],
+    )
+    password: Optional[str] = Field(
+        None,
+        min_length=6,
+        max_length=128,
+        description="Updated account password.",
+        examples=["NewSecret456!"],
+    )
+    role: Optional[UserRole] = Field(
+        None,
+        description="Updated user role.",
+        examples=[UserRole.MODERATOR],
+    )
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+
+class UserResponse(BaseModel):
+    """_summary_
+    Safe public response schema for user profiles (omits password_hash and otp).
+
+    Attributes:
+        id (uuid.UUID): Unique UUID identifier.
+        username (str): User handle.
+        email (EmailStr): User email address.
+        role (UserRole): Role assigned to user.
+        has_password (bool): Indicates if the account has a password set.
+        created_at (datetime): Account creation timestamp in UTC.
+    """
+    id: uuid.UUID = Field(..., description="Unique UUID identifier of the user.")
+    username: str = Field(..., description="User handle.")
+    email: EmailStr = Field(..., description="User email address.")
+    role: UserRole = Field(..., description="Role assigned to user.")
+    has_password: bool = Field(..., description="Indicates whether the account has a password set.")
+    created_at: datetime = Field(..., description="Account creation timestamp in UTC.")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        use_enum_values=True,
+    )
+
+
+class UserLoginResponse(BaseModel):
+    """_summary_
+    Response schema returned after successful authentication (via password or OTP).
+
+    Attributes:
+        message (str): Informational status message.
+        user (UserResponse): Profile details of the authenticated user.
+        auth_method (str): Authentication method utilized ('password' or 'otp').
+    """
+    message: str = Field(..., description="Status message.")
+    user: UserResponse = Field(..., description="Profile details of the authenticated user.")
+    auth_method: str = Field(..., description="Authentication method utilized ('password' or 'otp').")
+
+
+class OTPResponse(BaseModel):
+    """_summary_
+    Response schema returned when an OTP is requested.
+
+    Attributes:
+        message (str): Delivery status message.
+        email (EmailStr): Target email address.
+        expires_in_seconds (int): Expiry duration in seconds.
+    """
+    message: str = Field(..., description="Delivery status confirmation.")
+    email: EmailStr = Field(..., description="Target email address.")
+    expires_in_seconds: int = Field(..., description="Validity period in seconds.")
+
+
+class UserListResponse(BaseModel):
+    """_summary_
+    Response schema for paginated user list queries.
+
+    Attributes:
+        total (int): Total number of users matching criteria.
+        skip (int): Number of skipped records (offset).
+        limit (int): Maximum records returned per page.
+        users (List[UserResponse]): User profiles list.
+    """
+    total: int = Field(..., description="Total user records count.")
+    skip: int = Field(..., description="Pagination offset.")
+    limit: int = Field(..., description="Pagination limit.")
+    users: List[UserResponse] = Field(..., description="List of user profiles.")
+
+
+class MessageResponse(BaseModel):
+    """_summary_
+    Generic operation message response.
+
+    Attributes:
+        message (str): Status or confirmation message.
+    """
+    message: str = Field(..., description="Confirmation message.")

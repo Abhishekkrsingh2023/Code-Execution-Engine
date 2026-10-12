@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.routers import code_routes, root_routes
+from app.routers import code_routes, root_routes, user_routes
 
 
 app = FastAPI(
@@ -30,4 +30,6 @@ app.add_middleware(
 
 app.include_router(code_routes.router)
 app.include_router(root_routes.router)
+app.include_router(user_routes.router)
+
 
