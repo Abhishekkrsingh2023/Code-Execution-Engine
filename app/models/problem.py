@@ -1,8 +1,8 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, Integer, String, Text
+from sqlalchemy import DateTime, Enum as SAEnum, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -32,12 +32,6 @@ class Problem(Base):
         index=True,
         nullable=False,
     )
-    slug: Mapped[Optional[str]] = mapped_column(
-        String(255),
-        unique=True,
-        index=True,
-        nullable=True,
-    )
     description: Mapped[str] = mapped_column(
         Text,
         nullable=False,
@@ -60,20 +54,9 @@ class Problem(Base):
         nullable=False,
         comment="Execution memory limit in megabytes (MB)",
     )
-    is_published: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False,
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=_utcnow,
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=_utcnow,
-        onupdate=_utcnow,
         nullable=False,
     )
 

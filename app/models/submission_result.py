@@ -1,14 +1,12 @@
 import enum
 import uuid
-from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import BigInteger, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, Text
+from sqlalchemy import BigInteger, Enum as SAEnum, Float, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import _utcnow
 
 if TYPE_CHECKING:
     from app.models.submission import Submission
@@ -58,21 +56,6 @@ class SubmissionResult(Base):
         Float,
         nullable=True,
         comment="Memory used for this testcase in megabytes (MB)",
-    )
-    actual_output: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        comment="Program stdout output for this test case",
-    )
-    error_message: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True,
-        comment="Program stderr, error details, or diff against expected output",
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=_utcnow,
-        nullable=False,
     )
 
     # Relationships

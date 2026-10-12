@@ -1,11 +1,9 @@
-from datetime import datetime
 from typing import TYPE_CHECKING, List
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Text
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import _utcnow
 
 if TYPE_CHECKING:
     from app.models.problem import Problem
@@ -45,23 +43,6 @@ class TestCase(Base):
         default=1.0,
         nullable=False,
         comment="Weight/score assigned to this test case",
-    )
-    order_index: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
-        comment="Order of execution / presentation",
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=_utcnow,
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=_utcnow,
-        onupdate=_utcnow,
-        nullable=False,
     )
 
     # Relationships

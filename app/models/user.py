@@ -1,9 +1,9 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, String
+from sqlalchemy import DateTime, Enum as SAEnum, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,29 +40,26 @@ class User(Base):
         index=True,
         nullable=False,
     )
-    password_hash: Mapped[str] = mapped_column(
+    password_hash: Mapped[Optional[str]] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
+    )
+    otp: Mapped[Optional[str]] = mapped_column(
+        String(6),
+        nullable=True,
+    )
+    otp_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     role: Mapped[UserRole] = mapped_column(
         SAEnum(UserRole, native_enum=False, values_callable=lambda x: [e.value for e in x]),
         default=UserRole.USER,
         nullable=False,
     )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False,
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=_utcnow,
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=_utcnow,
-        onupdate=_utcnow,
         nullable=False,
     )
 
