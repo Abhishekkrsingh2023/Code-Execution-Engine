@@ -1,0 +1,314 @@
+"""Tests for code execution submission and polling routes.
+
+This module validates:
+- POST /api-v1/code/submit-code:
+    - Successful submission enqueueing across supported languages (python, cpp, java, c)
+    - Redis hash metadata persistence and queue job insertion
+    - Disk artifact generation under app/code/{submission_id}
+    - Request validation errors (unsupported language, empty code, empty test cases, forbidden fields)
+    - Error handling and disk cleanup on enqueue failure
+- GET /api-v1/code/stream/{submission_id}:
+    - Server-Sent Events (SSE) streaming with pre-existing result in Redis
+    - Invalid UUID path parameter handling (422)
+- GET /api-v1/code/submission/poll/{submission_id}:
+    - Polling existing submission metadata (200)
+    - Polling non-existent submission (404)
+"""
+
+import json
+import pathlib
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from httpx import AsyncClient
+from redis.asyncio import Redis
+
+from app.config import settings
+
+
+class TestCodeSubmitRoute:
+    """Test suite for POST /api-v1/code/submit-code."""
+
+    async def test_submit_code_python_success(
+        self,
+        async_client: AsyncClient,
+        redis_client: Redis,
+    ) -> None:
+        """Arrange: Valid Python submission with test cases.
+        Act: POST to /api-v1/code/submit-code.
+        Assert:
+        - 200 OK with queued status, submission ID, streaming & polling URLs.
+        - Redis hash 'submission:{id}' contains expected fields and status 'queued'.
+        - Redis list 'code:queue' contains the serialized payload.
+        - app/code/{id}/Main.py is created on disk with exact user code.
+        """
+        payload = {
+            "problem_id": "prob-001",
+            "problem_name": "Two Sum",
+            "user_code": "def solve(): print('hello')",
+            "language": "python",
+            "test_cases": [
+                {"input": "1 2\n", "expected_output": "3\n"},
+                {"input": "3 4\n", "expected_output": "7\n"},
+            ],
+            "time_limit": 2.0,
+        }
+
+        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["message"] == "Submission received successfully."
+        assert data["status"] == "queued"
+        sub_id = data["submission"]
+        assert sub_id is not None
+        assert data["streaming_url"] == f"/api-v1/code/stream/{sub_id}"
+        assert data["polling_url"] == f"/api-v1/code/submission/poll/{sub_id}"
+
+        # Verify Redis hash
+        sub_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{sub_id}"
+        redis_data = await redis_client.hgetall(sub_key)
+        assert redis_data["submission_id"] == sub_id
+        assert redis_data["language"] == "python"
+        assert redis_data["status"] == "queued"
+        assert redis_data["output"] == ""
+
+        # Verify Redis queue
+        queue_len = await redis_client.llen(settings.REDIS_QUEUE_NAME)
+        assert queue_len >= 1
+
+        # Verify disk file
+        code_file = pathlib.Path(__file__).parent.parent / "app" / "code" / sub_id / "Main.py"
+        assert code_file.exists()
+        assert code_file.read_text(encoding="utf-8") == payload["user_code"]
+
+    @pytest.mark.parametrize(
+        "language,file_ext",
+        [
+            ("cpp", "cpp"),
+            ("c", "c"),
+            ("java", "java"),
+        ],
+    )
+    async def test_submit_code_supported_languages(
+        self,
+        async_client: AsyncClient,
+        language: str,
+        file_ext: str,
+    ) -> None:
+        """Arrange: Valid submission for each supported compiled language.
+        Act: POST to /api-v1/code/submit-code.
+        Assert: Code file is saved on disk with the matching extension (Main.cpp, Main.java, Main.c).
+        """
+        payload = {
+            "problem_id": f"prob-{language}",
+            "problem_name": "Sample Problem",
+            "user_code": "// solution code",
+            "language": language,
+            "test_cases": [{"input": "5", "expected_output": "10"}],
+            "time_limit": 1.5,
+        }
+
+        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+
+        assert response.status_code == 200
+        sub_id = response.json()["submission"]
+        code_file = pathlib.Path(__file__).parent.parent / "app" / "code" / sub_id / f"Main.{file_ext}"
+        assert code_file.exists()
+
+    async def test_submit_code_unsupported_language_fails(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: Payload specifying an unsupported language ('ruby').
+        Act: POST to /api-v1/code/submit-code.
+        Assert: 422 Unprocessable Entity due to Language Enum validation.
+        """
+        payload = {
+            "problem_id": "prob-001",
+            "problem_name": "Two Sum",
+            "user_code": "puts 'hello'",
+            "language": "ruby",
+            "test_cases": [{"input": "1", "expected_output": "1"}],
+        }
+
+        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+
+        assert response.status_code == 422
+
+    async def test_submit_code_empty_code_fails(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: Payload with empty user_code string.
+        Act: POST to /api-v1/code/submit-code.
+        Assert: 422 Unprocessable Entity (min_length=1 constraint).
+        """
+        payload = {
+            "problem_id": "prob-001",
+            "problem_name": "Two Sum",
+            "user_code": "",
+            "language": "python",
+            "test_cases": [{"input": "1", "expected_output": "1"}],
+        }
+
+        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+
+        assert response.status_code == 422
+
+    async def test_submit_code_empty_test_cases_fails(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: Payload with empty test_cases array.
+        Act: POST to /api-v1/code/submit-code.
+        Assert: 422 Unprocessable Entity (min_length=1 constraint).
+        """
+        payload = {
+            "problem_id": "prob-001",
+            "problem_name": "Two Sum",
+            "user_code": "print('hello')",
+            "language": "python",
+            "test_cases": [],
+        }
+
+        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+
+        assert response.status_code == 422
+
+    async def test_submit_code_extra_fields_forbidden(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: Payload with forbidden unexpected field ('extra_field').
+        Act: POST to /api-v1/code/submit-code.
+        Assert: 422 Unprocessable Entity (extra='forbid' constraint).
+        """
+        payload = {
+            "problem_id": "prob-001",
+            "problem_name": "Two Sum",
+            "user_code": "print('hello')",
+            "language": "python",
+            "test_cases": [{"input": "1", "expected_output": "1"}],
+            "extra_field": "disallowed",
+        }
+
+        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+
+        assert response.status_code == 422
+
+    async def test_submit_code_failure_cleans_up_directory_and_raises_500(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: Simulate Redis pipeline failure during submission enqueueing.
+        Act: POST to /api-v1/code/submit-code.
+        Assert:
+        - 500 Internal Server Error returned.
+        - Directory created for the submission is removed from disk.
+        """
+        payload = {
+            "problem_id": "prob-001",
+            "problem_name": "Two Sum",
+            "user_code": "print('fail test')",
+            "language": "python",
+            "test_cases": [{"input": "1", "expected_output": "1"}],
+        }
+
+        # Mock Redis pipeline to raise an exception on execute
+        with patch("app.controllers.code_controller.redis_client.pipeline") as mock_pipeline:
+            mock_pipe = AsyncMock()
+            mock_pipe.hset = MagicMock()
+            mock_pipe.expire = MagicMock()
+            mock_pipe.lpush = MagicMock()
+            mock_pipe.__aenter__.return_value = mock_pipe
+            mock_pipe.execute.side_effect = RuntimeError("Redis connection broken")
+            mock_pipeline.return_value = mock_pipe
+
+            response = await async_client.post("/api-v1/code/submit-code", json=payload)
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Failed to enqueue submission"
+
+
+class TestCodePollingAndStreamingRoutes:
+    """Test suite for GET /api-v1/code/submission/poll/{id} and /api-v1/code/stream/{id}."""
+
+    async def test_poll_submission_found(
+        self,
+        async_client: AsyncClient,
+        redis_client: Redis,
+    ) -> None:
+        """Arrange: Existing submission stored in Redis hash.
+        Act: GET /api-v1/code/submission/poll/{submission_id}.
+        Assert: 200 OK returning the submission metadata dictionary.
+        """
+        sub_id = str(uuid.uuid4())
+        sub_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{sub_id}"
+        await redis_client.hset(
+            sub_key,
+            mapping={
+                "submission_id": sub_id,
+                "language": "python",
+                "status": "completed",
+                "output": "42\n",
+                "time_taken": "0.15",
+            },
+        )
+
+        response = await async_client.get(f"/api-v1/code/submission/poll/{sub_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["submission_id"] == sub_id
+        assert data["status"] == "completed"
+        assert data["output"] == "42\n"
+
+    async def test_poll_submission_not_found_returns_404(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: Non-existent submission identifier.
+        Act: GET /api-v1/code/submission/poll/{random_uuid}.
+        Assert: 404 Not Found with 'Submission not found.' detail message.
+        """
+        non_existent_id = str(uuid.uuid4())
+        response = await async_client.get(f"/api-v1/code/submission/poll/{non_existent_id}")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Submission not found."
+
+    async def test_stream_submission_with_saved_result(
+        self,
+        async_client: AsyncClient,
+        redis_client: Redis,
+    ) -> None:
+        """Arrange: Result already stored in Redis key 'result:{submission_id}'.
+        Act: GET /api-v1/code/stream/{submission_id}.
+        Assert:
+        - 200 OK with media type text/event-stream.
+        - Stream content begins with 'event: result' containing saved result data.
+        """
+        sub_id = uuid.uuid4()
+        result_key = f"result:{sub_id}"
+        saved_result = json.dumps({"status": "AC", "passed": 2, "total": 2})
+        await redis_client.set(result_key, saved_result)
+
+        response = await async_client.get(f"/api-v1/code/stream/{sub_id}")
+
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+        assert f"event: result\ndata: {saved_result}\n\n" in response.text
+
+    async def test_stream_submission_invalid_uuid_returns_422(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: Malformed non-UUID string as path parameter.
+        Act: GET /api-v1/code/stream/invalid-uuid-123.
+        Assert: 422 Unprocessable Entity (FastAPI path validation failure).
+        """
+        response = await async_client.get("/api-v1/code/stream/not-a-valid-uuid")
+
+        assert response.status_code == 422

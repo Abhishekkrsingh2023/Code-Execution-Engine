@@ -1,0 +1,151 @@
+"""Pytest configuration and fixtures.
+
+Provides test fixtures for:
+- FastAPI test client via httpx.AsyncClient with ASGITransport
+- Isolated PostgreSQL test database session with automatic data cleanup
+- Redis test client and state cleanup
+- Code submission folder cleanup
+"""
+
+import asyncio
+import pathlib
+import shutil
+from typing import AsyncGenerator
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+import app.models  # Ensure all models are registered with Base.metadata
+from app.config import settings
+from app.database import Base, get_db
+from app.main import app
+from app.redis_client import get_async_redis_client
+
+# Define test database URL pointing to the isolated test database
+TEST_DATABASE_URL = settings.DATABASE_URL.replace("/code_buddy", "/code_buddy_test")
+
+test_engine = create_async_engine(
+    TEST_DATABASE_URL,
+    echo=False,
+    poolclass=NullPool,
+)
+
+TestingSessionLocal = async_sessionmaker(
+    bind=test_engine,
+    class_=AsyncSession,
+    autoflush=False,
+    expire_on_commit=False,
+)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_database():
+    """Session-scoped fixture to create all tables in the test database once."""
+    async def _init():
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    async def _teardown():
+        await test_engine.dispose()
+
+    asyncio.run(_init())
+    yield
+    asyncio.run(_teardown())
+
+
+@pytest_asyncio.fixture
+async def db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Provides a clean database session for each test.
+    
+    Truncates/deletes all rows from all tables after each test to guarantee complete isolation.
+    """
+    async with TestingSessionLocal() as session:
+        yield session
+        # Cleanup: delete rows from all tables in reverse dependency order
+        for table in reversed(Base.metadata.sorted_tables):
+            await session.execute(table.delete())
+        await session.commit()
+
+
+@pytest_asyncio.fixture
+async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """Provides an httpx.AsyncClient using ASGITransport bound to the FastAPI app.
+    
+    Overrides the database dependency to use the isolated test session.
+    """
+    async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_code_storage():
+    """Cleans up any temporary code submission folders created in app/code during tests."""
+    code_dir = pathlib.Path(__file__).parent.parent / "app" / "code"
+    yield
+    if code_dir.exists():
+        for item in code_dir.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            elif item.is_file():
+                item.unlink(missing_ok=True)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def redis_client():
+    """Provides the async Redis client and flushes test keys and connection pool after each test."""
+    client = get_async_redis_client()
+    yield client
+    try:
+        # Clean up test keys created during tests
+        async for key in client.scan_iter("submission:*"):
+            await client.delete(key)
+        async for key in client.scan_iter("result:*"):
+            await client.delete(key)
+        await client.delete(settings.REDIS_QUEUE_NAME)
+    finally:
+        # Disconnect pool so next test can safely create connections in its own event loop
+        await client.connection_pool.disconnect()
+
+
+@pytest_asyncio.fixture
+async def create_user(db_session: AsyncSession):
+    """Factory fixture to quickly create and persist test users with custom attributes."""
+    from app.models.user import User, UserRole
+    from app.utils.security import hash_password
+
+    async def _create(
+        username: str = "testuser",
+        email: str = "testuser@example.com",
+        password: str | None = "Password123!",
+        role: UserRole = UserRole.USER,
+        is_email_verified: bool = True,
+        otp: str | None = None,
+        otp_expires_at=None,
+    ) -> User:
+        user = User(
+            username=username,
+            email=email,
+            password_hash=hash_password(password) if password else None,
+            role=role,
+            is_email_verified=is_email_verified,
+            otp=otp,
+            otp_expires_at=otp_expires_at,
+        )
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+        return user
+
+    return _create
+
