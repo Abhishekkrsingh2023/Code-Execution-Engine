@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from app.redis_client import get_async_redis_client
 
@@ -12,8 +12,11 @@ async def ping_redis():
             return {"message": "Pong from Redis!"}
         else:
             return {"message": "Failed to ping Redis."}
-    except Exception as e:
-        return {"error": "Failed to ping Redis.", "details": str(e)}
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to ping Redis.",
+        )
 
 @router.get("/health")
 def health_check():
