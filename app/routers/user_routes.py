@@ -83,7 +83,9 @@ async def register_user(
     responses={
         200: {"description": "Login successful."},
         401: {"description": "Invalid credentials or account configured for OTP-only login."},
-        403: {"description": "Email address is not verified. Please verify your email via OTP before logging in."},
+        403: {
+            "description": "Email address is not verified. Please verify your email via OTP before logging in."
+        },
     },
 )
 async def login_user(
@@ -149,7 +151,9 @@ async def request_otp(
     summary="Verify OTP and login",
     description="Validates a 6-digit OTP for email verification and passwordless login. Marks email verified and invalidates OTP upon success.",
     responses={
-        200: {"description": "OTP verified successfully. Email marked verified and user logged in."},
+        200: {
+            "description": "OTP verified successfully. Email marked verified and user logged in."
+        },
         400: {"description": "OTP code is incorrect, missing, or expired."},
         404: {"description": "No user account found with the specified email."},
     },
@@ -188,8 +192,12 @@ async def verify_otp(
 )
 async def list_users(
     skip: int = Query(default=0, ge=0, description="Number of records to skip for pagination."),
-    limit: int = Query(default=20, ge=1, le=100, description="Maximum number of records to return."),
-    role: UserRole | None = Query(default=None, description="Optional role filter (user, admin, moderator)."),
+    limit: int = Query(
+        default=20, ge=1, le=100, description="Maximum number of records to return."
+    ),
+    role: UserRole | None = Query(
+        default=None, description="Optional role filter (user, admin, moderator)."
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> UserListResponse:
     """_summary_

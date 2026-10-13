@@ -44,7 +44,7 @@ container = DockerContainerEngine(
     image_name="gcc:12.5",
     memory_limit="128m",
     cpu_limit="0.5",
-    volume_mount="/path/to/code_directory"
+    volume_mount="/path/to/code_directory",
 )
 
 try:
@@ -59,9 +59,7 @@ try:
     else:
         # 4. Execute the binary with standard input data
         exec_result = container.execute_code(
-            language="cpp",
-            input_data="42\n",
-            folder_name="submission_123"
+            language="cpp", input_data="42\n", folder_name="submission_123"
         )
         print(f"Output: {exec_result['stdout']}")
         print(f"Exit Code: {exec_result['returncode']}")

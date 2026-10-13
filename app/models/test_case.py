@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Float, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -49,7 +49,7 @@ class TestCase(Base):
     problem: Mapped["Problem"] = relationship(
         back_populates="test_cases",
     )
-    submission_results: Mapped[List["SubmissionResult"]] = relationship(
+    submission_results: Mapped[list["SubmissionResult"]] = relationship(
         back_populates="test_case",
         cascade="all, delete-orphan",
         passive_deletes=True,

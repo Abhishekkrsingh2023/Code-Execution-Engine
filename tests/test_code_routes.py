@@ -114,7 +114,9 @@ class TestCodeSubmitRoute:
 
         assert response.status_code == 200
         sub_id = response.json()["submission"]
-        code_file = pathlib.Path(__file__).parent.parent / "app" / "code" / sub_id / f"Main.{file_ext}"
+        code_file = (
+            pathlib.Path(__file__).parent.parent / "app" / "code" / sub_id / f"Main.{file_ext}"
+        )
         assert code_file.exists()
 
     async def test_submit_code_unsupported_language_fails(

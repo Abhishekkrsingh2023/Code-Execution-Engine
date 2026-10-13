@@ -1,16 +1,14 @@
-from logging.config import fileConfig
 import asyncio
+from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.database import Base
-from app.models import *
-
+from alembic import context
 from app.config import settings
-
-
+from app.database import Base
+from app.models import *  # noqa: F403
 
 # Alembic Config object
 config = context.config
@@ -20,10 +18,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option(
-    "sqlalchemy.url",
-    settings.DATABASE_URL.replace("%","%%")
-)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # Metadata for autogenerate
 target_metadata = Base.metadata
@@ -49,7 +44,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection):
+def do_run_migrations(connection: Connection) -> None:
     """
     This function receives a synchronous connection
     provided internally by SQLAlchemy.

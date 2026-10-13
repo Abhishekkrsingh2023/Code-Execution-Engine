@@ -7,7 +7,6 @@ This module validates:
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from httpx import AsyncClient
 
 

@@ -5,142 +5,261 @@ Revises: 9898aa51d5c7
 Create Date: 2026-10-11 23:08:04.254219
 
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
-revision: str = '3ddf460e90f6'
-down_revision: Union[str, Sequence[str], None] = '9898aa51d5c7'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "3ddf460e90f6"
+down_revision: str | Sequence[str] | None = "9898aa51d5c7"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.create_table('problems',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('title', sa.String(length=255), nullable=False),
-        sa.Column('description', sa.Text(), nullable=False),
-        sa.Column('difficulty', sa.Enum('easy', 'medium', 'hard', name='problemdifficulty', native_enum=False), nullable=False),
-        sa.Column('time_limit', sa.Float(), nullable=False, comment='Execution time limit in seconds'),
-        sa.Column('memory_limit', sa.Integer(), nullable=False, comment='Execution memory limit in megabytes (MB)'),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint('id')
+    op.create_table(
+        "problems",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("title", sa.String(length=255), nullable=False),
+        sa.Column("description", sa.Text(), nullable=False),
+        sa.Column(
+            "difficulty",
+            sa.Enum("easy", "medium", "hard", name="problemdifficulty", native_enum=False),
+            nullable=False,
+        ),
+        sa.Column(
+            "time_limit", sa.Float(), nullable=False, comment="Execution time limit in seconds"
+        ),
+        sa.Column(
+            "memory_limit",
+            sa.Integer(),
+            nullable=False,
+            comment="Execution memory limit in megabytes (MB)",
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f('ix_problems_difficulty'), 'problems', ['difficulty'], unique=False)
-    op.create_index(op.f('ix_problems_title'), 'problems', ['title'], unique=False)
+    op.create_index(op.f("ix_problems_difficulty"), "problems", ["difficulty"], unique=False)
+    op.create_index(op.f("ix_problems_title"), "problems", ["title"], unique=False)
 
-    op.create_table('users',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('username', sa.String(length=50), nullable=False),
-        sa.Column('email', sa.String(length=255), nullable=False),
-        sa.Column('password_hash', sa.String(length=255), nullable=True),
-        sa.Column('otp', sa.String(length=6), nullable=True),
-        sa.Column('otp_expires_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('role', sa.Enum('user', 'admin', 'moderator', name='userrole', native_enum=False), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint('id')
+    op.create_table(
+        "users",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("username", sa.String(length=50), nullable=False),
+        sa.Column("email", sa.String(length=255), nullable=False),
+        sa.Column("password_hash", sa.String(length=255), nullable=True),
+        sa.Column("otp", sa.String(length=6), nullable=True),
+        sa.Column("otp_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "role",
+            sa.Enum("user", "admin", "moderator", name="userrole", native_enum=False),
+            nullable=False,
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
-    op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
+    op.create_index(op.f("ix_users_email"), "users", ["email"], unique=True)
+    op.create_index(op.f("ix_users_username"), "users", ["username"], unique=True)
 
-    op.create_table('submissions',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('user_id', sa.UUID(), nullable=False),
-        sa.Column('problem_id', sa.Integer(), nullable=False),
-        sa.Column('language', sa.Enum('python', 'cpp', 'c', 'java', 'javascript', name='submissionlanguage', native_enum=False), nullable=False),
-        sa.Column('source_code', sa.Text(), nullable=False),
-        sa.Column('status', sa.Enum('pending', 'queued', 'running', 'accepted', 'wrong_answer', 'time_limit_exceeded', 'memory_limit_exceeded', 'compilation_error', 'runtime_error', 'internal_error', name='submissionstatus', native_enum=False), nullable=False),
-        sa.Column('execution_time', sa.Float(), nullable=True, comment='Total execution time in seconds'),
-        sa.Column('memory_used', sa.Float(), nullable=True, comment='Peak memory used in megabytes (MB)'),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(['problem_id'], ['problems.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
+    op.create_table(
+        "submissions",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("problem_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "language",
+            sa.Enum(
+                "python",
+                "cpp",
+                "c",
+                "java",
+                "javascript",
+                name="submissionlanguage",
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
+        sa.Column("source_code", sa.Text(), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum(
+                "pending",
+                "queued",
+                "running",
+                "accepted",
+                "wrong_answer",
+                "time_limit_exceeded",
+                "memory_limit_exceeded",
+                "compilation_error",
+                "runtime_error",
+                "internal_error",
+                name="submissionstatus",
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "execution_time", sa.Float(), nullable=True, comment="Total execution time in seconds"
+        ),
+        sa.Column(
+            "memory_used", sa.Float(), nullable=True, comment="Peak memory used in megabytes (MB)"
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["problem_id"], ["problems.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f('ix_submissions_created_at'), 'submissions', ['created_at'], unique=False)
-    op.create_index(op.f('ix_submissions_problem_id'), 'submissions', ['problem_id'], unique=False)
-    op.create_index(op.f('ix_submissions_status'), 'submissions', ['status'], unique=False)
-    op.create_index(op.f('ix_submissions_user_id'), 'submissions', ['user_id'], unique=False)
+    op.create_index(op.f("ix_submissions_created_at"), "submissions", ["created_at"], unique=False)
+    op.create_index(op.f("ix_submissions_problem_id"), "submissions", ["problem_id"], unique=False)
+    op.create_index(op.f("ix_submissions_status"), "submissions", ["status"], unique=False)
+    op.create_index(op.f("ix_submissions_user_id"), "submissions", ["user_id"], unique=False)
 
-    op.create_table('test_cases',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('problem_id', sa.Integer(), nullable=False),
-        sa.Column('input', sa.Text(), nullable=False),
-        sa.Column('expected_output', sa.Text(), nullable=False),
-        sa.Column('is_sample', sa.Boolean(), nullable=False, comment='Flag indicating whether this is a sample/example test case shown to users'),
-        sa.Column('weight', sa.Float(), nullable=False, comment='Weight/score assigned to this test case'),
-        sa.ForeignKeyConstraint(['problem_id'], ['problems.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
+    op.create_table(
+        "test_cases",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("problem_id", sa.Integer(), nullable=False),
+        sa.Column("input", sa.Text(), nullable=False),
+        sa.Column("expected_output", sa.Text(), nullable=False),
+        sa.Column(
+            "is_sample",
+            sa.Boolean(),
+            nullable=False,
+            comment="Flag indicating whether this is a sample/example test case shown to users",
+        ),
+        sa.Column(
+            "weight", sa.Float(), nullable=False, comment="Weight/score assigned to this test case"
+        ),
+        sa.ForeignKeyConstraint(["problem_id"], ["problems.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f('ix_test_cases_problem_id'), 'test_cases', ['problem_id'], unique=False)
+    op.create_index(op.f("ix_test_cases_problem_id"), "test_cases", ["problem_id"], unique=False)
 
-    op.create_table('submission_results',
-        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column('submission_id', sa.UUID(), nullable=False),
-        sa.Column('test_case_id', sa.Integer(), nullable=False),
-        sa.Column('status', sa.Enum('passed', 'failed', 'time_limit_exceeded', 'memory_limit_exceeded', 'runtime_error', 'compilation_error', name='judgestatus', native_enum=False), nullable=False),
-        sa.Column('execution_time', sa.Float(), nullable=True, comment='Execution time for this testcase in seconds'),
-        sa.Column('memory_used', sa.Float(), nullable=True, comment='Memory used for this testcase in megabytes (MB)'),
-        sa.ForeignKeyConstraint(['submission_id'], ['submissions.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['test_case_id'], ['test_cases.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
+    op.create_table(
+        "submission_results",
+        sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column("submission_id", sa.UUID(), nullable=False),
+        sa.Column("test_case_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum(
+                "passed",
+                "failed",
+                "time_limit_exceeded",
+                "memory_limit_exceeded",
+                "runtime_error",
+                "compilation_error",
+                name="judgestatus",
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "execution_time",
+            sa.Float(),
+            nullable=True,
+            comment="Execution time for this testcase in seconds",
+        ),
+        sa.Column(
+            "memory_used",
+            sa.Float(),
+            nullable=True,
+            comment="Memory used for this testcase in megabytes (MB)",
+        ),
+        sa.ForeignKeyConstraint(["submission_id"], ["submissions.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["test_case_id"], ["test_cases.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f('ix_submission_results_submission_id'), 'submission_results', ['submission_id'], unique=False)
-    op.create_index(op.f('ix_submission_results_test_case_id'), 'submission_results', ['test_case_id'], unique=False)
+    op.create_index(
+        op.f("ix_submission_results_submission_id"),
+        "submission_results",
+        ["submission_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_submission_results_test_case_id"),
+        "submission_results",
+        ["test_case_id"],
+        unique=False,
+    )
 
-    op.alter_column('common_problem_templates', 'created_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               existing_nullable=False)
-    op.alter_column('common_problem_templates', 'updated_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               existing_nullable=False)
-    op.alter_column('problem_templates', 'created_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               existing_nullable=False)
-    op.alter_column('problem_templates', 'updated_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               existing_nullable=False)
+    op.alter_column(
+        "common_problem_templates",
+        "created_at",
+        existing_type=postgresql.TIMESTAMP(),
+        type_=sa.DateTime(timezone=True),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "common_problem_templates",
+        "updated_at",
+        existing_type=postgresql.TIMESTAMP(),
+        type_=sa.DateTime(timezone=True),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "problem_templates",
+        "created_at",
+        existing_type=postgresql.TIMESTAMP(),
+        type_=sa.DateTime(timezone=True),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "problem_templates",
+        "updated_at",
+        existing_type=postgresql.TIMESTAMP(),
+        type_=sa.DateTime(timezone=True),
+        existing_nullable=False,
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.alter_column('problem_templates', 'updated_at',
-               existing_type=sa.DateTime(timezone=True),
-               type_=postgresql.TIMESTAMP(),
-               existing_nullable=False)
-    op.alter_column('problem_templates', 'created_at',
-               existing_type=sa.DateTime(timezone=True),
-               type_=postgresql.TIMESTAMP(),
-               existing_nullable=False)
-    op.alter_column('common_problem_templates', 'updated_at',
-               existing_type=sa.DateTime(timezone=True),
-               type_=postgresql.TIMESTAMP(),
-               existing_nullable=False)
-    op.alter_column('common_problem_templates', 'created_at',
-               existing_type=sa.DateTime(timezone=True),
-               type_=postgresql.TIMESTAMP(),
-               existing_nullable=False)
-    op.drop_index(op.f('ix_submission_results_test_case_id'), table_name='submission_results')
-    op.drop_index(op.f('ix_submission_results_submission_id'), table_name='submission_results')
-    op.drop_table('submission_results')
-    op.drop_index(op.f('ix_test_cases_problem_id'), table_name='test_cases')
-    op.drop_table('test_cases')
-    op.drop_index(op.f('ix_submissions_user_id'), table_name='submissions')
-    op.drop_index(op.f('ix_submissions_status'), table_name='submissions')
-    op.drop_index(op.f('ix_submissions_problem_id'), table_name='submissions')
-    op.drop_index(op.f('ix_submissions_created_at'), table_name='submissions')
-    op.drop_table('submissions')
-    op.drop_index(op.f('ix_users_username'), table_name='users')
-    op.drop_index(op.f('ix_users_email'), table_name='users')
-    op.drop_table('users')
-    op.drop_index(op.f('ix_problems_title'), table_name='problems')
-    op.drop_index(op.f('ix_problems_difficulty'), table_name='problems')
-    op.drop_table('problems')
+    op.alter_column(
+        "problem_templates",
+        "updated_at",
+        existing_type=sa.DateTime(timezone=True),
+        type_=postgresql.TIMESTAMP(),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "problem_templates",
+        "created_at",
+        existing_type=sa.DateTime(timezone=True),
+        type_=postgresql.TIMESTAMP(),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "common_problem_templates",
+        "updated_at",
+        existing_type=sa.DateTime(timezone=True),
+        type_=postgresql.TIMESTAMP(),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "common_problem_templates",
+        "created_at",
+        existing_type=sa.DateTime(timezone=True),
+        type_=postgresql.TIMESTAMP(),
+        existing_nullable=False,
+    )
+    op.drop_index(op.f("ix_submission_results_test_case_id"), table_name="submission_results")
+    op.drop_index(op.f("ix_submission_results_submission_id"), table_name="submission_results")
+    op.drop_table("submission_results")
+    op.drop_index(op.f("ix_test_cases_problem_id"), table_name="test_cases")
+    op.drop_table("test_cases")
+    op.drop_index(op.f("ix_submissions_user_id"), table_name="submissions")
+    op.drop_index(op.f("ix_submissions_status"), table_name="submissions")
+    op.drop_index(op.f("ix_submissions_problem_id"), table_name="submissions")
+    op.drop_index(op.f("ix_submissions_created_at"), table_name="submissions")
+    op.drop_table("submissions")
+    op.drop_index(op.f("ix_users_username"), table_name="users")
+    op.drop_index(op.f("ix_users_email"), table_name="users")
+    op.drop_table("users")
+    op.drop_index(op.f("ix_problems_title"), table_name="problems")
+    op.drop_index(op.f("ix_problems_difficulty"), table_name="problems")
+    op.drop_table("problems")

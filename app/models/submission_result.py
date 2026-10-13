@@ -1,8 +1,9 @@
 import enum
 import uuid
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Enum as SAEnum, Float, ForeignKey, Integer
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,12 +48,12 @@ class SubmissionResult(Base):
         default=JudgeStatus.PASSED,
         nullable=False,
     )
-    execution_time: Mapped[Optional[float]] = mapped_column(
+    execution_time: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
         comment="Execution time for this testcase in seconds",
     )
-    memory_used: Mapped[Optional[float]] = mapped_column(
+    memory_used: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
         comment="Memory used for this testcase in megabytes (MB)",

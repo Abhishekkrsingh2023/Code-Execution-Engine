@@ -8,7 +8,7 @@ from loguru import logger
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
     MessageResponse,
     OTPResponse,
@@ -88,7 +88,11 @@ async def handle_register_user(
         await db.commit()
         await db.refresh(new_user)
         logger.info("Successfully registered user '{}' (ID: {})", new_user.username, new_user.id)
-        logger.info("[MOCK EMAIL] Verification OTP for new user {} is: {} (valid for 10 minutes)", new_user.email, otp_code)
+        logger.info(
+            "[MOCK EMAIL] Verification OTP for new user {} is: {} (valid for 10 minutes)",
+            new_user.email,
+            otp_code,
+        )
         return UserResponse.model_validate(new_user)
     except Exception as exc:
         await db.rollback()
@@ -96,7 +100,7 @@ async def handle_register_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to register user due to an internal error.",
-        )
+        ) from exc
 
 
 async def handle_login_user(
@@ -148,11 +152,20 @@ async def handle_login_user(
             detail="Email address is not verified. Please verify your email via OTP before logging in.",
         )
 
+    if user.status != UserStatus.ACTIVE:
+        logger.warning("Login rejected for non-active user: {}", user.username)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account is {user.status.value}. Please contact support.",
+        )
+
     logger.info("User '{}' authenticated successfully via password", user.username)
     return UserLoginResponse(
         message="Login successful.",
         user=UserResponse.model_validate(user),
         auth_method="password",
+        access_token=str(user.id),
+        token_type="bearer",
     )
 
 
@@ -197,7 +210,9 @@ async def handle_request_otp(
         await db.commit()
         # In production, dispatch email via background worker/SMTP here.
         # For development / judge engine API, we log the OTP safely.
-        logger.info("[MOCK EMAIL] OTP for {} is: {} (valid for 10 minutes)", payload.email, otp_code)
+        logger.info(
+            "[MOCK EMAIL] OTP for {} is: {} (valid for 10 minutes)", payload.email, otp_code
+        )
 
         return OTPResponse(
             message="OTP generated and sent to email successfully.",
@@ -210,7 +225,7 @@ async def handle_request_otp(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate OTP.",
-        )
+        ) from exc
 
 
 async def handle_verify_otp(
@@ -282,6 +297,8 @@ async def handle_verify_otp(
         message="OTP verified successfully. Email verified and login granted.",
         user=UserResponse.model_validate(user),
         auth_method="otp",
+        access_token=str(user.id),
+        token_type="bearer",
     )
 
 
@@ -492,7 +509,7 @@ async def handle_update_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update user profile.",
-        )
+        ) from exc
 
 
 async def handle_delete_user(
@@ -527,4 +544,6 @@ async def handle_delete_user(
     await db.commit()
     logger.info("Deleted user '{}' (ID: {})", username, user_id)
 
-    return MessageResponse(message=f"User '{username}' with ID '{user_id}' was successfully deleted.")
+    return MessageResponse(
+        message=f"User '{username}' with ID '{user_id}' was successfully deleted."
+    )

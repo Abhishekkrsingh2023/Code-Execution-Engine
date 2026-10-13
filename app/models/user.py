@@ -21,6 +21,12 @@ class UserRole(str, enum.Enum):
     MODERATOR = "moderator"
 
 
+class UserStatus(str, enum.Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -58,7 +64,18 @@ class User(Base):
         default=UserRole.USER,
         nullable=False,
     )
+    status: Mapped[UserStatus] = mapped_column(
+        SAEnum(UserStatus, native_enum=False, values_callable=lambda x: [e.value for e in x]),
+        default=UserStatus.ACTIVE,
+        nullable=False,
+        index=True,
+    )
     is_email_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+    is_protected: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
         nullable=False,
@@ -85,4 +102,3 @@ class User(Base):
     def is_verified(self) -> bool:
         """Returns True if user's email address has been verified."""
         return self.is_email_verified
-

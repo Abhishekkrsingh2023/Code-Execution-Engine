@@ -1,8 +1,8 @@
+import uuid
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
-import uuid
-from typing import List
+
 
 class Language(str, Enum):
     c = "c"
@@ -10,19 +10,20 @@ class Language(str, Enum):
     java = "java"
     python = "python"
 
-def get_uuid():
+
+def get_uuid() -> str:
     return str(uuid.uuid4())  # full 128-bit UUID — do NOT slice, 8 chars risk collisions at scale
 
 
 class TestCase(BaseModel):
-    input: str = Field(...,description="Input provided to the user's program.")
-    expected_output: str = Field(...,description="Expected output for the given input.")
+    input: str = Field(..., description="Input provided to the user's program.")
+    expected_output: str = Field(..., description="Expected output for the given input.")
 
 
 class SubmissionRequest(BaseModel):
     """_summary_
     This class represents a request to submit code for execution.
-    
+
     Attributes:
         problem_id (str): Unique identifier of the programming problem.
         submission_id (str): Unique identifier for the submission.
@@ -32,12 +33,17 @@ class SubmissionRequest(BaseModel):
         test_cases (List[TestCase]): List of test cases against which the code will be executed
         time_limit (float): Maximum execution time in seconds, default is 2.0 seconds.
     """
+
     problem_id: str = Field(..., description="Unique identifier of the programming problem.")
-    submission_id: str = Field(default_factory=get_uuid, description="Unique identifier for the submission.")
+    submission_id: str = Field(
+        default_factory=get_uuid, description="Unique identifier for the submission."
+    )
     problem_name: str = Field(..., description="Name of the programming problem.")
     user_code: str = Field(..., min_length=1, description="Source code submitted by the user.")
     language: Language = Field(..., description="Programming language of the submission.")
-    test_cases: List[TestCase] = Field(..., min_length=1, description="List of test cases against which the code will be executed.")
+    test_cases: list[TestCase] = Field(
+        ..., min_length=1, description="List of test cases against which the code will be executed."
+    )
     time_limit: float = Field(default=2.0, gt=0, description="Maximum execution time in seconds.")
 
     model_config = ConfigDict(

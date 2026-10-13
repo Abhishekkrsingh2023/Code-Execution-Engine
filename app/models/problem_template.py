@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import List
 
-from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,9 +16,11 @@ class CommonProblemTemplate(Base):
     time_limit: Mapped[float] = mapped_column(Float, default=2.0)
     submit_test_cases: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
 
-    templates: Mapped[List["ProblemTemplate"]] = relationship(
+    templates: Mapped[list["ProblemTemplate"]] = relationship(
         back_populates="common",
         passive_deletes=True,
     )
@@ -37,6 +38,8 @@ class ProblemTemplate(Base):
     user_code: Mapped[str] = mapped_column(Text, nullable=False)
     main_code: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
 
     common: Mapped["CommonProblemTemplate"] = relationship(back_populates="templates")
