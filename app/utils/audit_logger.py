@@ -1,15 +1,15 @@
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models.audit_log import AuditLog, AuditLogAction, AuditLogStatus
+from app.models.audit_log import AuditLog, AuditLogStatus
 
 SENSITIVE_KEYS = {
     "password",
@@ -25,10 +25,10 @@ SENSITIVE_KEYS = {
     "credit_card",
 }
 
-_audit_sink_id: Optional[int] = None
+_audit_sink_id: int | None = None
 
 
-def to_str_val(val: Any) -> str:
+def to_str_val(val: object) -> str:
     """Safely converts enum, string, or arbitrary value to string representation."""
     if val is None:
         return ""
@@ -37,8 +37,7 @@ def to_str_val(val: Any) -> str:
     return str(val)
 
 
-
-def sanitize_details(data: Any) -> Any:
+def sanitize_details(data: object) -> object:
     """Recursively scrub sensitive fields like passwords, tokens, and OTPs."""
     if isinstance(data, dict):
         cleaned = {}
@@ -54,9 +53,9 @@ def sanitize_details(data: Any) -> Any:
 
 
 def setup_audit_logger(
-    log_file: Optional[str | Path] = None,
-    rotation: Optional[str] = None,
-    retention: Optional[str] = None,
+    log_file: str | Path | None = None,
+    rotation: str | None = None,
+    retention: str | None = None,
     level: str = "INFO",
 ) -> int:
     """Configures file-based logging for audit events using loguru with rotation and retention.
@@ -92,18 +91,18 @@ def setup_audit_logger(
 
 
 async def log_audit_event(
-    db: Optional[AsyncSession] = None,
+    db: AsyncSession | None = None,
     *,
     action: str,
-    actor_id: Optional[uuid.UUID] = None,
-    actor_username: Optional[str] = None,
-    actor_role: Optional[str] = None,
-    target_type: Optional[str] = None,
-    target_id: Optional[str] = None,
+    actor_id: uuid.UUID | None = None,
+    actor_username: str | None = None,
+    actor_role: str | None = None,
+    target_type: str | None = None,
+    target_id: str | None = None,
     status: str = AuditLogStatus.SUCCESS.value,
-    details: Optional[dict[str, Any]] = None,
-    error_message: Optional[str] = None,
-    ip_address: Optional[str] = None,
+    details: dict[str, Any] | None = None,
+    error_message: str | None = None,
+    ip_address: str | None = None,
 ) -> AuditLog:
     """Records an audit event in both loguru file-based storage and the database.
 
@@ -124,7 +123,7 @@ async def log_audit_event(
     }
 
     log_entry_payload = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "action": action,
         "actor_id": str(actor_id) if actor_id else None,
         "actor_username": actor_username,
@@ -166,7 +165,10 @@ async def log_audit_event(
             await db.refresh(audit_entry)
             return audit_entry
         except Exception as exc:
-            logger.warning("Failed to persist audit log using active session: {}. Retrying with fresh session.", exc)
+            logger.warning(
+                "Failed to persist audit log using active session: {}. Retrying with fresh session.",
+                exc,
+            )
             try:
                 await db.rollback()
             except Exception:

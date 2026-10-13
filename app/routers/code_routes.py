@@ -1,22 +1,21 @@
 import uuid
+from typing import Any
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.schemas.submission import SubmissionRequest
 from app.controllers.code_controller import (
     handle_poll_submission,
+    handle_stream_submission,
     handle_submit_code_request,
-    handle_stream_submission
 )
+from app.schemas.submission import SubmissionRequest
 
-router = APIRouter(
-    prefix="/api-v1/code",
-    tags=["code"]
-)
+router = APIRouter(prefix="/api-v1/code", tags=["code"])
 
 
 @router.post("/submit-code")
-async def submit_code_request(submission: SubmissionRequest):
+async def submit_code_request(submission: SubmissionRequest) -> dict[str, Any]:
     """_summary_
     This endpoint allows clients to submit code for execution. It handles the submission and returns a response with the submission status and streaming URL.
     Args:
@@ -29,7 +28,7 @@ async def submit_code_request(submission: SubmissionRequest):
 
 
 @router.get("/stream/{submission_id}")
-async def stream_submission(submission_id: uuid.UUID)-> StreamingResponse:
+async def stream_submission(submission_id: uuid.UUID) -> StreamingResponse:
     """_summary_
     This endpoint allows clients to stream the results of a code submission by its unique identifier. It retrieves the submission data from Redis and returns a streaming response to the client.
     Args:
@@ -42,7 +41,7 @@ async def stream_submission(submission_id: uuid.UUID)-> StreamingResponse:
 
 
 @router.get("/submission/poll/{submission_id}")
-async def poll_submission(submission_id: str):
+async def poll_submission(submission_id: str) -> dict[str, Any]:
     """_summary_
     This endpoint allows clients to poll the status of a code submission by its unique identifier. It retrieves the submission data from Redis and returns it to the client.
 

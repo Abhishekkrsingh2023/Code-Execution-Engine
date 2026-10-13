@@ -34,28 +34,25 @@ Validates:
     - Loguru file-based logging, log rotation, retention, and duplicate sink prevention
 """
 
-import json
 import uuid
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.audit_log import AuditLog, AuditLogAction, AuditLogStatus
+from app.models.audit_log import AuditLog
 from app.models.base import _utcnow
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.models.submission import Submission, SubmissionLanguage, SubmissionStatus
 from app.models.user import User, UserRole, UserStatus
 from app.utils.audit_logger import sanitize_details, setup_audit_logger
-
+from tests.conftest import CreateUserCallable
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Admin Access Control Tests
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestAdminAccessControl:
     """Tests for authentication and role-based access control on admin endpoints."""
@@ -148,7 +145,7 @@ class TestAdminAccessControl:
     async def test_suspended_admin_rejected_with_forbidden(
         self,
         async_client: AsyncClient,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Suspended administrator account returns 403 Forbidden."""
         suspended_admin = await create_user(
@@ -169,6 +166,7 @@ class TestAdminAccessControl:
 # 2. User Management Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestAdminUserManagement:
     """Tests for administrator user listing, inspection, status, and role management."""
 
@@ -176,7 +174,7 @@ class TestAdminUserManagement:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Admin can retrieve paginated list of users."""
         for i in range(5):
@@ -197,7 +195,7 @@ class TestAdminUserManagement:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Admin can filter users by role."""
         await create_user(username="mod_test_1", email="mod1@example.com", role=UserRole.MODERATOR)
@@ -216,7 +214,7 @@ class TestAdminUserManagement:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Admin can filter users by account status."""
         await create_user(username="active_u", email="active@example.com", status=UserStatus.ACTIVE)
@@ -235,7 +233,7 @@ class TestAdminUserManagement:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Admin can search users by username or email substring."""
         await create_user(username="find_me_sam", email="sam@special.com")
@@ -426,6 +424,7 @@ class TestAdminUserManagement:
 # 3. Role Escalation & Self-Lockout Prevention Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestRoleEscalationAndSelfLockout:
     """Tests for role escalation barriers and self-lockout safeguards."""
 
@@ -474,7 +473,7 @@ class TestRoleEscalationAndSelfLockout:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Protected system accounts cannot have their role modified."""
         protected_user = await create_user(
@@ -495,7 +494,7 @@ class TestRoleEscalationAndSelfLockout:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Protected system accounts cannot be suspended or deactivated."""
         protected_user = await create_user(
@@ -516,7 +515,7 @@ class TestRoleEscalationAndSelfLockout:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """Protected system accounts cannot be deleted."""
         protected_user = await create_user(
@@ -537,6 +536,7 @@ class TestRoleEscalationAndSelfLockout:
 # 4. System Statistics & Dashboard Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestSystemStatisticsAndDashboard:
     """Tests for aggregate metrics across users, problems, submissions, and activity."""
 
@@ -544,12 +544,18 @@ class TestSystemStatisticsAndDashboard:
         self,
         async_client: AsyncClient,
         admin_user: User,
-        create_user,
+        create_user: CreateUserCallable,
     ) -> None:
         """User statistics calculate correct totals by role, status, and period."""
-        await create_user(username="u1", email="u1@test.com", role=UserRole.USER, status=UserStatus.ACTIVE)
-        await create_user(username="u2", email="u2@test.com", role=UserRole.MODERATOR, status=UserStatus.ACTIVE)
-        await create_user(username="u3", email="u3@test.com", role=UserRole.USER, status=UserStatus.SUSPENDED)
+        await create_user(
+            username="u1", email="u1@test.com", role=UserRole.USER, status=UserStatus.ACTIVE
+        )
+        await create_user(
+            username="u2", email="u2@test.com", role=UserRole.MODERATOR, status=UserStatus.ACTIVE
+        )
+        await create_user(
+            username="u3", email="u3@test.com", role=UserRole.USER, status=UserStatus.SUSPENDED
+        )
 
         response = await async_client.get(
             "/api-v1/admin/stats/users?days=7",
@@ -640,24 +646,39 @@ class TestSystemStatisticsAndDashboard:
         await db_session.refresh(p)
 
         s1 = Submission(
-            user_id=normal_user.id, problem_id=p.id, language=SubmissionLanguage.PYTHON,
-            source_code="print(1)", status=SubmissionStatus.ACCEPTED,
+            user_id=normal_user.id,
+            problem_id=p.id,
+            language=SubmissionLanguage.PYTHON,
+            source_code="print(1)",
+            status=SubmissionStatus.ACCEPTED,
         )
         s2 = Submission(
-            user_id=normal_user.id, problem_id=p.id, language=SubmissionLanguage.PYTHON,
-            source_code="print(2)", status=SubmissionStatus.WRONG_ANSWER,
+            user_id=normal_user.id,
+            problem_id=p.id,
+            language=SubmissionLanguage.PYTHON,
+            source_code="print(2)",
+            status=SubmissionStatus.WRONG_ANSWER,
         )
         s3 = Submission(
-            user_id=normal_user.id, problem_id=p.id, language=SubmissionLanguage.PYTHON,
-            source_code="syntax err", status=SubmissionStatus.COMPILATION_ERROR,
+            user_id=normal_user.id,
+            problem_id=p.id,
+            language=SubmissionLanguage.PYTHON,
+            source_code="syntax err",
+            status=SubmissionStatus.COMPILATION_ERROR,
         )
         s4 = Submission(
-            user_id=normal_user.id, problem_id=p.id, language=SubmissionLanguage.PYTHON,
-            source_code="1/0", status=SubmissionStatus.RUNTIME_ERROR,
+            user_id=normal_user.id,
+            problem_id=p.id,
+            language=SubmissionLanguage.PYTHON,
+            source_code="1/0",
+            status=SubmissionStatus.RUNTIME_ERROR,
         )
         s5 = Submission(
-            user_id=normal_user.id, problem_id=p.id, language=SubmissionLanguage.PYTHON,
-            source_code="while True: pass", status=SubmissionStatus.TIME_LIMIT_EXCEEDED,
+            user_id=normal_user.id,
+            problem_id=p.id,
+            language=SubmissionLanguage.PYTHON,
+            source_code="while True: pass",
+            status=SubmissionStatus.TIME_LIMIT_EXCEEDED,
         )
         db_session.add_all([s1, s2, s3, s4, s5])
         await db_session.commit()
@@ -697,6 +718,7 @@ class TestSystemStatisticsAndDashboard:
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Audit Logging & Reliability Tests
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestAuditLoggingAndReliability:
     """Tests for audit log completeness, transaction consistency, log rotation, and data scrubbing."""
@@ -780,11 +802,11 @@ class TestAuditLoggingAndReliability:
         orig_commit = db_session.commit
         call_count = 0
 
-        async def failing_commit():
+        async def failing_commit() -> None:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                raise Exception("Simulated DB connection failure")
+                raise RuntimeError("Simulated DB connection failure")
             return await orig_commit()
 
         db_session.commit = failing_commit
@@ -837,6 +859,7 @@ class TestAuditLoggingAndReliability:
 
         # Log a sample audit event
         from loguru import logger
+
         logger.bind(audit=True, audit_action="test_action").info("Single audit message")
 
         # Verify exactly one line was written (no duplication)

@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +50,7 @@ router = APIRouter(
 # User Management Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @router.get(
     "/users",
     response_model=AdminUserListResponse,
@@ -60,9 +60,11 @@ router = APIRouter(
 async def list_admin_users(
     skip: int = Query(default=0, ge=0, description="Offset."),
     limit: int = Query(default=20, ge=1, le=100, description="Page limit."),
-    role: Optional[UserRole] = Query(default=None, description="Filter by user role."),
-    user_status: Optional[UserStatus] = Query(default=None, alias="status", description="Filter by account status."),
-    search: Optional[str] = Query(default=None, description="Search term for username or email."),
+    role: UserRole | None = Query(default=None, description="Filter by user role."),
+    user_status: UserStatus | None = Query(
+        default=None, alias="status", description="Filter by account status."
+    ),
+    search: str | None = Query(default=None, description="Search term for username or email."),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(require_admin),
 ) -> AdminUserListResponse:
@@ -186,6 +188,7 @@ async def admin_delete_user(
 # System-Wide Statistics and Dashboard Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @router.get(
     "/stats",
     response_model=DashboardStatsResponse,
@@ -278,6 +281,7 @@ async def get_activity_stats(
 # Audit Log Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @router.get(
     "/audit-logs",
     response_model=AuditLogListResponse,
@@ -287,13 +291,15 @@ async def get_activity_stats(
 async def list_audit_logs(
     skip: int = Query(default=0, ge=0, description="Offset."),
     limit: int = Query(default=20, ge=1, le=100, description="Page limit."),
-    action: Optional[str] = Query(default=None, description="Action filter."),
-    actor_id: Optional[uuid.UUID] = Query(default=None, description="Actor user ID filter."),
-    actor_role: Optional[str] = Query(default=None, description="Actor role filter."),
-    target_type: Optional[str] = Query(default=None, description="Target resource type filter."),
-    log_status: Optional[str] = Query(default=None, alias="status", description="Outcome status filter (success, failure, error)."),
-    start_date: Optional[datetime] = Query(default=None, description="Earliest timestamp filter."),
-    end_date: Optional[datetime] = Query(default=None, description="Latest timestamp filter."),
+    action: str | None = Query(default=None, description="Action filter."),
+    actor_id: uuid.UUID | None = Query(default=None, description="Actor user ID filter."),
+    actor_role: str | None = Query(default=None, description="Actor role filter."),
+    target_type: str | None = Query(default=None, description="Target resource type filter."),
+    log_status: str | None = Query(
+        default=None, alias="status", description="Outcome status filter (success, failure, error)."
+    ),
+    start_date: datetime | None = Query(default=None, description="Earliest timestamp filter."),
+    end_date: datetime | None = Query(default=None, description="Latest timestamp filter."),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(require_admin),
 ) -> AuditLogListResponse:

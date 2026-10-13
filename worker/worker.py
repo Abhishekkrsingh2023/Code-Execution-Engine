@@ -1,13 +1,12 @@
 # import json
-import orjson # faster JSON serialization/deserialization than the built-in json module
+import logging
 import pathlib
 import shutil
 import time
-import logging
 from enum import Enum
 
+import orjson  # faster JSON serialization/deserialization than the built-in json module
 import redis
-
 from container import DockerContainerEngine
 
 logging.basicConfig(
@@ -19,23 +18,25 @@ log = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-class JobStatus(str, Enum):
-    QUEUED    = "queued"
-    RUNNING   = "running"
-    COMPLETED = "completed"
-    FAILED    = "failed"
-    TLE       = "tle"  # Time Limit Exceeded
 
-QUEUE_NAME      = "code:queue"
-SUBMISSION_KEY  = "submission:"
+class JobStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TLE = "tle"  # Time Limit Exceeded
+
+
+QUEUE_NAME = "code:queue"
+SUBMISSION_KEY = "submission:"
 
 # docker image for each supported language
 # NOTE: there is no official "java:*" image on Docker Hub — use eclipse-temurin.
 DOCKER_IMAGE = {
     "python": "python:3.12-alpine",
-    "cpp":    "gcc:12.5",
-    "c":      "gcc:12.5",
-    "java":   "eclipse-temurin:22-jdk-alpine",
+    "cpp": "gcc:12.5",
+    "c": "gcc:12.5",
+    "java": "eclipse-temurin:22-jdk-alpine",
 }
 
 # Host-side base directory; the worker appends /{submission_id} when mounting
@@ -47,6 +48,7 @@ REDIS_RECONNECT_DELAY = 5
 
 
 # ── Redis factory ────────────────────────────────────────────────────────────
+
 
 def _make_redis_client() -> redis.Redis:
     """
@@ -60,13 +62,14 @@ def _make_redis_client() -> redis.Redis:
         host="localhost",
         port=6379,
         decode_responses=True,
-        socket_timeout=30,           # raise after 30 s of silence
-        socket_connect_timeout=10,   # fail fast on initial connect
-        socket_keepalive=True,       # OS-level TCP keepalive (detects dropped conns)
+        socket_timeout=30,  # raise after 30 s of silence
+        socket_connect_timeout=10,  # fail fast on initial connect
+        socket_keepalive=True,  # OS-level TCP keepalive (detects dropped conns)
     )
 
 
 # ── Job helpers ──────────────────────────────────────────────────────────────
+
 
 def extract_submission_data(job: str) -> dict:
     """
@@ -77,9 +80,9 @@ def extract_submission_data(job: str) -> dict:
     job_data = orjson.loads(job)
     return {
         "submission_id": job_data.get("submission_id"),
-        "language":      job_data.get("language"),
-        "test_cases":    job_data.get("test_cases"),
-        "time_limit":    job_data.get("time_limit", 2.0),
+        "language": job_data.get("language"),
+        "test_cases": job_data.get("test_cases"),
+        "time_limit": job_data.get("time_limit", 2.0),
     }
 
 
@@ -94,9 +97,9 @@ def compile_and_run_code(submission_data: dict) -> dict:
     Returns a result dict suitable for direct storage in Redis via hset.
     """
     submission_id = submission_data["submission_id"]
-    language      = submission_data["language"]
-    test_cases    = submission_data["test_cases"]
-    time_limit    = float(submission_data.get("time_limit") or 2.0)
+    language = submission_data["language"]
+    test_cases = submission_data["test_cases"]
+    time_limit = float(submission_data.get("time_limit") or 2.0)
 
     # Add a small grace period on top of the declared limit so Docker exec
     # overhead doesn't count against the user's allotted time.
@@ -114,16 +117,16 @@ def compile_and_run_code(submission_data: dict) -> dict:
         try:
             container.start_container(folder_name=submission_id)
         except Exception as e:
-            raise RuntimeError(f"Failed to start Docker container: {e}")
+            raise RuntimeError(f"Failed to start Docker container: {e}") from e
 
         # ── Compile (no-op for interpreted languages) ────────────────────
         compile_result = container.compile_code(language, folder_name=submission_id)
         if not compile_result["compiled"]:
             return {
-                "status":     JobStatus.FAILED.value,
-                "output":     compile_result["stdout"],
-                "error":      compile_result["stderr"],
-                "results":    orjson.dumps([]),
+                "status": JobStatus.FAILED.value,
+                "output": compile_result["stdout"],
+                "error": compile_result["stderr"],
+                "results": orjson.dumps([]),
                 "time_taken": 0.0,
             }
 
@@ -133,7 +136,7 @@ def compile_and_run_code(submission_data: dict) -> dict:
         overall_status = JobStatus.COMPLETED
 
         for test_case in test_cases:
-            input_data      = test_case.get("input", "")
+            input_data = test_case.get("input", "")
             expected_output = test_case.get("expected_output", "")
 
             execution_result = container.execute_code(
@@ -145,33 +148,41 @@ def compile_and_run_code(submission_data: dict) -> dict:
 
             if execution_result["returncode"] == 124:
                 # Time Limit Exceeded — mark and continue so all test cases are reported
-                results.append({
-                    "status": "tle",
-                    "output": "",
-                    "error":  "Time Limit Exceeded",
-                })
+                results.append(
+                    {
+                        "status": "tle",
+                        "output": "",
+                        "error": "Time Limit Exceeded",
+                    }
+                )
                 overall_status = JobStatus.TLE
-            elif execution_result["returncode"] == 0 and \
-                    execution_result["stdout"].strip() == expected_output.strip():
-                results.append({
-                    "status": "passed",
-                    "output": execution_result["stdout"],
-                    "error":  "",
-                })
+            elif (
+                execution_result["returncode"] == 0
+                and execution_result["stdout"].strip() == expected_output.strip()
+            ):
+                results.append(
+                    {
+                        "status": "passed",
+                        "output": execution_result["stdout"],
+                        "error": "",
+                    }
+                )
             else:
-                results.append({
-                    "status": "failed",
-                    "output": execution_result["stdout"],
-                    "error":  execution_result["stderr"],
-                })
+                results.append(
+                    {
+                        "status": "failed",
+                        "output": execution_result["stdout"],
+                        "error": execution_result["stderr"],
+                    }
+                )
 
         total_time = time.perf_counter() - start_time
 
         return {
-            "status":     overall_status.value,
-            "output":     "",
-            "error":      "",
-            "results":    orjson.dumps(results),
+            "status": overall_status.value,
+            "output": "",
+            "error": "",
+            "results": orjson.dumps(results),
             "time_taken": round(total_time, 4),
         }
 
@@ -185,6 +196,7 @@ def compile_and_run_code(submission_data: dict) -> dict:
 
 
 # ── Main processing loop ─────────────────────────────────────────────────────
+
 
 def process_jobs(client: redis.Redis) -> None:
     """
@@ -218,10 +230,10 @@ def process_jobs(client: redis.Redis) -> None:
         except Exception as e:
             log.exception("Unhandled error for submission %s", submission_id)
             results = {
-                "status":     JobStatus.FAILED.value,
-                "output":     "",
-                "error":      str(e),
-                "results":    orjson.dumps([]),   # ← always present so callers don't get KeyError
+                "status": JobStatus.FAILED.value,
+                "output": "",
+                "error": str(e),
+                "results": orjson.dumps([]),  # ← always present so callers don't get KeyError
                 "time_taken": 0.0,
             }
 
@@ -237,8 +249,8 @@ def process_jobs(client: redis.Redis) -> None:
                 **results,
             }
         payload = orjson.dumps(result_dict)
-        client.set(f"result:{submission_id}", payload, ex=3600)   # durable copy, 1h TTL
-        client.publish(f"result:{submission_id}", payload)        # live notification
+        client.set(f"result:{submission_id}", payload, ex=3600)  # durable copy, 1h TTL
+        client.publish(f"result:{submission_id}", payload)  # live notification
 
         # Clean up the submission's source directory from disk
         submission_dir = CODE_BASE / submission_id

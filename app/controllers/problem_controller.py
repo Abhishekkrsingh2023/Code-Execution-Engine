@@ -1,6 +1,3 @@
-import uuid
-from typing import Optional
-
 from fastapi import HTTPException, Request, status
 from loguru import logger
 from sqlalchemy import func, or_, select
@@ -99,7 +96,7 @@ async def handle_create_problem(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create problem due to an internal error.",
-        )
+        ) from exc
 
 
 async def handle_update_problem(
@@ -115,7 +112,7 @@ async def handle_update_problem(
     actor_username = str(user.username)
     actor_role = to_str_val(user.role)
 
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted == False)
+    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
     result = await db.execute(stmt)
     problem = result.scalar_one_or_none()
 
@@ -133,7 +130,10 @@ async def handle_update_problem(
         changes["description"] = {"old": problem.description[:50], "new": payload.description[:50]}
         problem.description = payload.description
     if payload.difficulty is not None and payload.difficulty != problem.difficulty:
-        changes["difficulty"] = {"old": to_str_val(problem.difficulty), "new": to_str_val(payload.difficulty)}
+        changes["difficulty"] = {
+            "old": to_str_val(problem.difficulty),
+            "new": to_str_val(payload.difficulty),
+        }
         problem.difficulty = payload.difficulty
     if payload.category is not None and payload.category != problem.category:
         changes["category"] = {"old": problem.category, "new": payload.category}
@@ -145,7 +145,10 @@ async def handle_update_problem(
         changes["time_limit"] = {"old": str(problem.time_limit), "new": str(payload.time_limit)}
         problem.time_limit = payload.time_limit
     if payload.memory_limit is not None and payload.memory_limit != problem.memory_limit:
-        changes["memory_limit"] = {"old": str(problem.memory_limit), "new": str(payload.memory_limit)}
+        changes["memory_limit"] = {
+            "old": str(problem.memory_limit),
+            "new": str(payload.memory_limit),
+        }
         problem.memory_limit = payload.memory_limit
     if payload.status is not None and payload.status != problem.status:
         changes["status"] = {"old": to_str_val(problem.status), "new": to_str_val(payload.status)}
@@ -190,7 +193,7 @@ async def handle_update_problem(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update problem.",
-        )
+        ) from exc
 
 
 async def handle_update_problem_status(
@@ -206,7 +209,7 @@ async def handle_update_problem_status(
     actor_username = str(user.username)
     actor_role = to_str_val(user.role)
 
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted == False)
+    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
     result = await db.execute(stmt)
     problem = result.scalar_one_or_none()
 
@@ -259,7 +262,7 @@ async def handle_update_problem_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update publication status.",
-        )
+        ) from exc
 
 
 async def handle_delete_problem(
@@ -274,7 +277,7 @@ async def handle_delete_problem(
     actor_username = str(user.username)
     actor_role = to_str_val(user.role)
 
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted == False)
+    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
     result = await db.execute(stmt)
     problem = result.scalar_one_or_none()
 
@@ -303,7 +306,9 @@ async def handle_delete_problem(
             ip_address=client_ip,
         )
 
-        return MessageResponse(message=f"Problem '{problem.title}' (ID {problem_id}) deleted successfully.")
+        return MessageResponse(
+            message=f"Problem '{problem.title}' (ID {problem_id}) deleted successfully."
+        )
 
     except Exception as exc:
         await db.rollback()
@@ -323,22 +328,28 @@ async def handle_delete_problem(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete problem.",
-        )
+        ) from exc
 
 
 async def handle_list_problems(
     skip: int,
     limit: int,
-    difficulty: Optional[ProblemDifficulty],
-    category: Optional[str],
-    topic: Optional[str],
-    problem_status: Optional[ProblemStatus],
-    search: Optional[str],
+    difficulty: ProblemDifficulty | None,
+    category: str | None,
+    topic: str | None,
+    problem_status: ProblemStatus | None,
+    search: str | None,
     db: AsyncSession,
 ) -> ProblemListResponse:
     """Retrieves paginated list of non-deleted problems with filters."""
-    count_stmt = select(func.count(Problem.id)).where(Problem.is_deleted == False)
-    query_stmt = select(Problem).where(Problem.is_deleted == False).order_by(Problem.created_at.desc()).offset(skip).limit(limit)
+    count_stmt = select(func.count(Problem.id)).where(Problem.is_deleted.is_(False))
+    query_stmt = (
+        select(Problem)
+        .where(Problem.is_deleted.is_(False))
+        .order_by(Problem.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
 
     if difficulty is not None:
         count_stmt = count_stmt.where(Problem.difficulty == difficulty)
@@ -384,7 +395,7 @@ async def handle_get_problem(
     db: AsyncSession,
 ) -> ProblemResponse:
     """Retrieves single problem by ID."""
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted == False)
+    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
     result = await db.execute(stmt)
     problem = result.scalar_one_or_none()
 

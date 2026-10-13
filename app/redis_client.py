@@ -1,5 +1,5 @@
-import redis.asyncio as redis_async
 import redis as redis_sync
+import redis.asyncio as redis_async
 
 from app.config import settings
 
@@ -18,8 +18,9 @@ _redis_sync_client = redis_sync.Redis(
 )
 
 
-def get_async_redis_client():
+def get_async_redis_client() -> redis_async.Redis:
     return _async_redis_client
 
-def get_sync_redis_client():
+
+def get_sync_redis_client() -> redis_sync.Redis:
     return _redis_sync_client

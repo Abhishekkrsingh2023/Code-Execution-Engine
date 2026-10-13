@@ -102,4 +102,3 @@ class User(Base):
     def is_verified(self) -> bool:
         """Returns True if user's email address has been verified."""
         return self.is_email_verified
-

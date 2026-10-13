@@ -1,6 +1,6 @@
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import HTTPException, Request, status
 from loguru import logger
@@ -8,9 +8,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
-from app.models.base import _utcnow
-from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
-from app.models.submission import Submission, SubmissionStatus
+from app.models.problem import Problem
+from app.models.submission import Submission
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.admin import (
     AdminUpdateUserRequest,
@@ -34,17 +33,17 @@ from app.schemas.user import MessageResponse
 from app.utils.audit_logger import log_audit_event, to_str_val
 from app.utils.security import hash_password
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # User Management Handlers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 async def handle_list_admin_users(
     skip: int,
     limit: int,
-    role: Optional[UserRole],
-    user_status: Optional[UserStatus],
-    search: Optional[str],
+    role: UserRole | None,
+    user_status: UserStatus | None,
+    search: str | None,
     db: AsyncSession,
 ) -> AdminUserListResponse:
     """Retrieves paginated users for admin with submission and problem metrics."""
@@ -79,7 +78,9 @@ async def handle_list_admin_users(
         sub_count_stmt = select(func.count(Submission.id)).where(Submission.user_id == u.id)
         sub_count = (await db.execute(sub_count_stmt)).scalar_one()
 
-        prob_count_stmt = select(func.count(Problem.id)).where(Problem.created_by == u.id, Problem.is_deleted == False)
+        prob_count_stmt = select(func.count(Problem.id)).where(
+            Problem.created_by == u.id, Problem.is_deleted.is_(False)
+        )
         prob_count = (await db.execute(prob_count_stmt)).scalar_one()
 
         admin_users.append(
@@ -144,7 +145,9 @@ async def handle_get_admin_user_detail(
     ]
 
     # Problems created count
-    prob_count_stmt = select(func.count(Problem.id)).where(Problem.created_by == user.id, Problem.is_deleted == False)
+    prob_count_stmt = select(func.count(Problem.id)).where(
+        Problem.created_by == user.id, Problem.is_deleted.is_(False)
+    )
     prob_count = (await db.execute(prob_count_stmt)).scalar_one()
 
     # Recent audit actions involving this user
@@ -206,7 +209,10 @@ async def handle_update_user_role(
             target_type="user",
             target_id=str(user_id),
             status="failure",
-            details={"attempted_role": to_str_val(payload.role), "reason": "Self-demotion prohibited"},
+            details={
+                "attempted_role": to_str_val(payload.role),
+                "reason": "Self-demotion prohibited",
+            },
             error_message="Administrators cannot modify their own role.",
             ip_address=client_ip,
         )
@@ -236,7 +242,10 @@ async def handle_update_user_role(
             target_type="user",
             target_id=str(user_id),
             status="failure",
-            details={"attempted_role": to_str_val(payload.role), "reason": "Protected system account"},
+            details={
+                "attempted_role": to_str_val(payload.role),
+                "reason": "Protected system account",
+            },
             error_message="Protected system accounts cannot have their role modified.",
             ip_address=client_ip,
         )
@@ -262,7 +271,11 @@ async def handle_update_user_role(
             target_type="user",
             target_id=str(user_id),
             status="success",
-            details={"old_role": old_role, "new_role": new_role, "target_username": target_user.username},
+            details={
+                "old_role": old_role,
+                "new_role": new_role,
+                "target_username": target_user.username,
+            },
             ip_address=client_ip,
         )
 
@@ -294,7 +307,7 @@ async def handle_update_user_role(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update user role.",
-        )
+        ) from exc
 
 
 async def handle_update_user_status(
@@ -378,7 +391,11 @@ async def handle_update_user_status(
             target_type="user",
             target_id=str(user_id),
             status="success",
-            details={"old_status": old_status, "new_status": new_status, "target_username": target_user.username},
+            details={
+                "old_status": old_status,
+                "new_status": new_status,
+                "target_username": target_user.username,
+            },
             ip_address=client_ip,
         )
 
@@ -410,7 +427,7 @@ async def handle_update_user_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update account status.",
-        )
+        ) from exc
 
 
 async def handle_admin_update_user(
@@ -496,7 +513,10 @@ async def handle_admin_update_user(
         target_user.status = payload.status
 
     if payload.is_email_verified is not None:
-        changes["is_email_verified"] = {"old": target_user.is_email_verified, "new": payload.is_email_verified}
+        changes["is_email_verified"] = {
+            "old": target_user.is_email_verified,
+            "new": payload.is_email_verified,
+        }
         target_user.is_email_verified = payload.is_email_verified
 
     if payload.is_protected is not None:
@@ -541,7 +561,7 @@ async def handle_admin_update_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update user profile.",
-        )
+        ) from exc
 
 
 async def handle_admin_delete_user(
@@ -643,12 +663,13 @@ async def handle_admin_delete_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete user.",
-        )
+        ) from exc
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Statistics and Dashboard Handlers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 async def handle_get_user_stats(
     days: int,
@@ -710,14 +731,16 @@ async def handle_get_problem_stats(
 ) -> ProblemStatsResponse:
     """Calculates problem statistics grouped by difficulty, category, topic, status."""
     # Total active problems
-    total_active = (await db.execute(select(func.count(Problem.id)).where(Problem.is_deleted == False))).scalar_one()
+    total_active = (
+        await db.execute(select(func.count(Problem.id)).where(Problem.is_deleted.is_(False)))
+    ).scalar_one()
     # Total including deleted
     total_all = (await db.execute(select(func.count(Problem.id)))).scalar_one()
 
     # By difficulty
     diff_stmt = (
         select(Problem.difficulty, func.count(Problem.id))
-        .where(Problem.is_deleted == False)
+        .where(Problem.is_deleted.is_(False))
         .group_by(Problem.difficulty)
     )
     diff_rows = (await db.execute(diff_stmt)).all()
@@ -728,7 +751,7 @@ async def handle_get_problem_stats(
     # By category
     cat_stmt = (
         select(Problem.category, func.count(Problem.id))
-        .where(Problem.is_deleted == False)
+        .where(Problem.is_deleted.is_(False))
         .group_by(Problem.category)
     )
     cat_rows = (await db.execute(cat_stmt)).all()
@@ -737,7 +760,7 @@ async def handle_get_problem_stats(
     # By topic (array, tree, linkedlist, recursion, etc.)
     topic_stmt = (
         select(Problem.topic, func.count(Problem.id))
-        .where(Problem.is_deleted == False)
+        .where(Problem.is_deleted.is_(False))
         .group_by(Problem.topic)
     )
     topic_rows = (await db.execute(topic_stmt)).all()
@@ -746,7 +769,7 @@ async def handle_get_problem_stats(
     # By status (published, unpublished, draft, archived)
     stat_stmt = (
         select(Problem.status, func.count(Problem.id))
-        .where(Problem.is_deleted == False)
+        .where(Problem.is_deleted.is_(False))
         .group_by(Problem.status)
     )
     stat_rows = (await db.execute(stat_stmt)).all()
@@ -758,7 +781,7 @@ async def handle_get_problem_stats(
     mod_stmt = (
         select(User.id, User.username, func.count(Problem.id))
         .join(Problem, Problem.created_by == User.id)
-        .where(Problem.is_deleted == False)
+        .where(Problem.is_deleted.is_(False))
         .group_by(User.id, User.username)
     )
     mod_rows = (await db.execute(mod_stmt)).all()
@@ -774,7 +797,7 @@ async def handle_get_problem_stats(
     # Recently created
     recent_created_stmt = (
         select(Problem)
-        .where(Problem.is_deleted == False)
+        .where(Problem.is_deleted.is_(False))
         .order_by(Problem.created_at.desc())
         .limit(5)
     )
@@ -783,7 +806,7 @@ async def handle_get_problem_stats(
     # Recently updated
     recent_updated_stmt = (
         select(Problem)
-        .where(Problem.is_deleted == False)
+        .where(Problem.is_deleted.is_(False))
         .order_by(Problem.updated_at.desc())
         .limit(5)
     )
@@ -792,7 +815,7 @@ async def handle_get_problem_stats(
     # Recently deleted
     recent_deleted_stmt = (
         select(Problem)
-        .where(Problem.is_deleted == True)
+        .where(Problem.is_deleted.is_(True))
         .order_by(Problem.deleted_at.desc())
         .limit(5)
     )
@@ -962,16 +985,17 @@ async def handle_get_dashboard_stats(
 # Audit Log Queries
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 async def handle_list_audit_logs(
     skip: int,
     limit: int,
-    action: Optional[str],
-    actor_id: Optional[uuid.UUID],
-    actor_role: Optional[str],
-    target_type: Optional[str],
-    log_status: Optional[str],
-    start_date: Optional[datetime],
-    end_date: Optional[datetime],
+    action: str | None,
+    actor_id: uuid.UUID | None,
+    actor_role: str | None,
+    target_type: str | None,
+    log_status: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
     db: AsyncSession,
 ) -> AuditLogListResponse:
     """Retrieves paginated audit log entries with granular filtering."""

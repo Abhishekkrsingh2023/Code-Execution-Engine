@@ -1,6 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 
@@ -20,7 +19,7 @@ def hash_password(password: str) -> str:
     return hashed.decode("utf-8")
 
 
-def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
     """_summary_
     Verifies a plaintext password against a stored bcrypt hash using constant-time check.
 
@@ -52,7 +51,7 @@ def generate_otp(length: int = 6) -> str:
     Returns:
         str: Generated OTP string with leading zeroes padded.
     """
-    max_val = 10 ** length
+    max_val = 10**length
     otp_number = secrets.randbelow(max_val)
     return f"{otp_number:0{length}d}"
 
@@ -67,4 +66,4 @@ def get_otp_expiry(minutes: int = 10) -> datetime:
     Returns:
         datetime: Timezone-aware UTC expiration datetime.
     """
-    return datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    return datetime.now(UTC) + timedelta(minutes=minutes)

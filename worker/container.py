@@ -25,7 +25,7 @@ class DockerContainerEngine:
         memory_limit: str = "128m",
         cpu_limit: str = "0.5",
         pids_limit: int = 50,
-    ):
+    ) -> None:
         """
         Args:
             image_name:   Docker image to use (e.g. ``python:3.12-alpine``).
@@ -49,16 +49,35 @@ class DockerContainerEngine:
     def _get_command_to_compile(self, language: str, folder_name: str) -> list[str]:
         """Return the ``docker exec`` argv list to compile the code."""
         if language == "java":
-            return ["docker", "exec", "-i", self.container_id, "javac", f"/shared/{folder_name}/Main.java"]
+            return [
+                "docker",
+                "exec",
+                "-i",
+                self.container_id,
+                "javac",
+                f"/shared/{folder_name}/Main.java",
+            ]
         elif language == "cpp":
             return [
-                "docker", "exec", "-i", self.container_id,
-                "g++", f"/shared/{folder_name}/Main.cpp", "-o", f"/shared/{folder_name}/a.out",
+                "docker",
+                "exec",
+                "-i",
+                self.container_id,
+                "g++",
+                f"/shared/{folder_name}/Main.cpp",
+                "-o",
+                f"/shared/{folder_name}/a.out",
             ]
         elif language == "c":
             return [
-                "docker", "exec", "-i", self.container_id,
-                "gcc", f"/shared/{folder_name}/Main.c", "-o", f"/shared/{folder_name}/a.out",
+                "docker",
+                "exec",
+                "-i",
+                self.container_id,
+                "gcc",
+                f"/shared/{folder_name}/Main.c",
+                "-o",
+                f"/shared/{folder_name}/a.out",
             ]
         else:
             raise ValueError(f"Unsupported language for compilation: {language}")
@@ -66,11 +85,27 @@ class DockerContainerEngine:
     def _get_command_to_execute(self, language: str, folder_name: str) -> list[str]:
         """Return the ``docker exec`` argv list to run the compiled/interpreted code."""
         if language == "java":
-            return ["docker", "exec", "-i", self.container_id, "java", "-cp", f"/shared/{folder_name}", "Main"]
+            return [
+                "docker",
+                "exec",
+                "-i",
+                self.container_id,
+                "java",
+                "-cp",
+                f"/shared/{folder_name}",
+                "Main",
+            ]
         elif language in ["c", "cpp"]:
             return ["docker", "exec", "-i", self.container_id, f"/shared/{folder_name}/a.out"]
         elif language == "python":
-            return ["docker", "exec", "-i", self.container_id, "python", f"/shared/{folder_name}/Main.py"]
+            return [
+                "docker",
+                "exec",
+                "-i",
+                self.container_id,
+                "python",
+                f"/shared/{folder_name}/Main.py",
+            ]
         else:
             raise ValueError(f"Unsupported language for execution: {language}")
 
@@ -104,12 +139,19 @@ class DockerContainerEngine:
         """
         try:
             command = [
-                "docker", "run", "-d",
-                "--network",      "none",
-                "--memory",       self.memory_limit,
-                "--cpus",         self.cpu_limit,
-                "--pids-limit",   str(self.pids_limit), # Security: cap process count to defeat fork bombs
-                "--security-opt", "no-new-privileges", # Security: block setuid / capability escalation
+                "docker",
+                "run",
+                "-d",
+                "--network",
+                "none",
+                "--memory",
+                self.memory_limit,
+                "--cpus",
+                self.cpu_limit,
+                "--pids-limit",
+                str(self.pids_limit),  # Security: cap process count to defeat fork bombs
+                "--security-opt",
+                "no-new-privileges",  # Security: block setuid / capability escalation
             ]
 
             if self.volume_mount and folder_name:
@@ -125,7 +167,7 @@ class DockerContainerEngine:
             return self.container_id
 
         except Exception as e:
-            raise RuntimeError(f"Failed to start Docker container: {e}")
+            raise RuntimeError(f"Failed to start Docker container: {e}") from e
 
     def remove_container(self) -> None:
         """Force-remove the container. Safe to call even if already removed."""
@@ -159,14 +201,18 @@ class DockerContainerEngine:
                 capture_output=True,
             )
             return self._return_format(
-                result.stdout, result.stderr, result.returncode,
+                result.stdout,
+                result.stderr,
+                result.returncode,
                 compiled=(result.returncode == 0),
             )
         except Exception as e:
             print(e)
             return self._return_format("", str(e), -1, compiled=False)
 
-    def execute_code(self, language: str, input_data: str, folder_name: str, timeout: float = 5.0) -> dict:
+    def execute_code(
+        self, language: str, input_data: str, folder_name: str, timeout: float = 5.0
+    ) -> dict:
         """
         Execute the code inside the container against a single test-case input.
 

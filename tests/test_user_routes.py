@@ -39,8 +39,9 @@ This module validates:
 """
 
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 from httpx import AsyncClient
@@ -171,7 +172,11 @@ class TestUserRegister:
             {"username": "ab", "email": "valid@example.com"},  # too short (<3)
             {"username": "bad handle", "email": "valid@example.com"},  # spaces not allowed
             {"username": "alice", "email": "invalid-email"},  # invalid email format
-            {"username": "alice", "email": "valid@example.com", "password": "123"},  # short password (<6)
+            {
+                "username": "alice",
+                "email": "valid@example.com",
+                "password": "123",
+            },  # short password (<6)
         ],
     )
     async def test_register_user_validation_failures(

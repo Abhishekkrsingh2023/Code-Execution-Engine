@@ -1,5 +1,3 @@
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,11 +58,17 @@ async def create_problem(
 async def list_problems(
     skip: int = Query(default=0, ge=0, description="Offset."),
     limit: int = Query(default=20, ge=1, le=100, description="Page limit."),
-    difficulty: Optional[ProblemDifficulty] = Query(default=None, description="Difficulty filter."),
-    category: Optional[str] = Query(default=None, description="Category filter."),
-    topic: Optional[str] = Query(default=None, description="Topic tag filter (e.g. array, tree, linkedlist, recursion)."),
-    problem_status: Optional[ProblemStatus] = Query(default=None, alias="status", description="Status filter."),
-    search: Optional[str] = Query(default=None, description="Search term across title, description, and topic."),
+    difficulty: ProblemDifficulty | None = Query(default=None, description="Difficulty filter."),
+    category: str | None = Query(default=None, description="Category filter."),
+    topic: str | None = Query(
+        default=None, description="Topic tag filter (e.g. array, tree, linkedlist, recursion)."
+    ),
+    problem_status: ProblemStatus | None = Query(
+        default=None, alias="status", description="Status filter."
+    ),
+    search: str | None = Query(
+        default=None, description="Search term across title, description, and topic."
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> ProblemListResponse:
     """Lists problems with filtering by difficulty, category, topic, status, or search query."""

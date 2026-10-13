@@ -1,14 +1,22 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.routers import admin_routes, code_routes, problem_routes, root_routes, user_routes
+from app.routers import (
+    admin_routes,
+    code_routes,
+    problem_routes,
+    root_routes,
+    user_routes,
+)
 from app.utils.audit_logger import setup_audit_logger
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Initialize audit file logger with loguru
     setup_audit_logger()
     yield
@@ -43,6 +51,3 @@ app.include_router(root_routes.router)
 app.include_router(user_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(problem_routes.router)
-
-
-

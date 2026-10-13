@@ -1,5 +1,4 @@
 import uuid
-from typing import Optional
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
@@ -11,8 +10,8 @@ from app.models.user import User, UserRole, UserStatus
 
 async def get_current_user(
     request: Request,
-    authorization: Optional[str] = Header(None, description="Bearer token or user ID"),
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="User UUID primary key"),
+    authorization: str | None = Header(None, description="Bearer token or user ID"),
+    x_user_id: str | None = Header(None, alias="X-User-Id", description="User UUID primary key"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Dependency to extract and validate the authenticated user from request headers.
@@ -25,7 +24,7 @@ async def get_current_user(
     - 401 UNAUTHORIZED if missing, malformed, or user not found.
     - 403 FORBIDDEN if user account is deactivated or suspended.
     """
-    token: Optional[str] = None
+    token: str | None = None
 
     if authorization:
         parts = authorization.strip().split()
@@ -51,7 +50,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token format.",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
 
     stmt = select(User).where(User.id == user_uuid)
     result = await db.execute(stmt)

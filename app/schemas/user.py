@@ -16,6 +16,7 @@ class UserRegisterRequest(BaseModel):
         email (EmailStr): Unique valid email address.
         password (Optional[str]): Optional password string (min 6 characters).
     """
+
     username: str = Field(
         ...,
         min_length=3,
@@ -51,6 +52,7 @@ class UserLoginRequest(BaseModel):
         username_or_email (str): Registered username or email.
         password (str): Account password.
     """
+
     username_or_email: str = Field(
         ...,
         min_length=3,
@@ -79,6 +81,7 @@ class RequestOTPRequest(BaseModel):
     Attributes:
         email (EmailStr): Target user email address for OTP delivery.
     """
+
     email: EmailStr = Field(
         ...,
         description="User email address for passwordless OTP login.",
@@ -99,6 +102,7 @@ class VerifyOTPRequest(BaseModel):
         email (EmailStr): Target user email address.
         otp (str): 6-digit numeric verification code.
     """
+
     email: EmailStr = Field(
         ...,
         description="User email address.",
@@ -129,6 +133,7 @@ class UserUpdateRequest(BaseModel):
         password (Optional[str]): Updated plaintext password.
         role (Optional[UserRole]): Updated user role.
     """
+
     username: str | None = Field(
         None,
         min_length=3,
@@ -182,13 +187,18 @@ class UserResponse(BaseModel):
         has_password (bool): Indicates if the account has a password set.
         created_at (datetime): Account creation timestamp in UTC.
     """
+
     id: uuid.UUID = Field(..., description="Unique UUID identifier of the user.")
     username: str = Field(..., description="User handle.")
     email: EmailStr = Field(..., description="User email address.")
     role: UserRole = Field(..., description="Role assigned to user.")
     status: UserStatus = Field(default=UserStatus.ACTIVE, description="Account status.")
-    is_email_verified: bool = Field(default=False, description="Indicates whether the user's email has been verified.")
-    is_protected: bool = Field(default=False, description="Indicates whether the account is a protected system account.")
+    is_email_verified: bool = Field(
+        default=False, description="Indicates whether the user's email has been verified."
+    )
+    is_protected: bool = Field(
+        default=False, description="Indicates whether the account is a protected system account."
+    )
     has_password: bool = Field(..., description="Indicates whether the account has a password set.")
     created_at: datetime = Field(..., description="Account creation timestamp in UTC.")
 
@@ -209,10 +219,15 @@ class UserLoginResponse(BaseModel):
         access_token (Optional[str]): Bearer token for authenticating subsequent requests.
         token_type (str): Token type ('bearer').
     """
+
     message: str = Field(..., description="Status message.")
     user: UserResponse = Field(..., description="Profile details of the authenticated user.")
-    auth_method: str = Field(..., description="Authentication method utilized ('password' or 'otp').")
-    access_token: str | None = Field(None, description="Bearer token (UUID string) for authentication.")
+    auth_method: str = Field(
+        ..., description="Authentication method utilized ('password' or 'otp')."
+    )
+    access_token: str | None = Field(
+        None, description="Bearer token (UUID string) for authentication."
+    )
     token_type: str = Field("bearer", description="Token type.")
 
 
@@ -225,6 +240,7 @@ class OTPResponse(BaseModel):
         email (EmailStr): Target email address.
         expires_in_seconds (int): Expiry duration in seconds.
     """
+
     message: str = Field(..., description="Delivery status confirmation.")
     email: EmailStr = Field(..., description="Target email address.")
     expires_in_seconds: int = Field(..., description="Validity period in seconds.")
@@ -240,6 +256,7 @@ class UserListResponse(BaseModel):
         limit (int): Maximum records returned per page.
         users (List[UserResponse]): User profiles list.
     """
+
     total: int = Field(..., description="Total user records count.")
     skip: int = Field(..., description="Pagination offset.")
     limit: int = Field(..., description="Pagination limit.")
@@ -253,6 +270,7 @@ class MessageResponse(BaseModel):
     Attributes:
         message (str): Status or confirmation message.
     """
+
     message: str = Field(..., description="Confirmation message.")
 
 
@@ -265,6 +283,10 @@ class UsernameAvailabilityResponse(BaseModel):
         is_available (bool): True if username is available for registration, False if taken.
         available (bool): Convenience alias for is_available.
     """
+
     username: str = Field(..., description="Target username handle queried.")
-    is_available: bool = Field(..., description="True if the username is available for registration, False if already taken.")
+    is_available: bool = Field(
+        ...,
+        description="True if the username is available for registration, False if already taken.",
+    )
     available: bool = Field(..., description="Convenience alias reflecting availability.")

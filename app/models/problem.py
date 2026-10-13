@@ -1,9 +1,10 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,7 +48,9 @@ class Problem(Base):
         nullable=False,
     )
     difficulty: Mapped[ProblemDifficulty] = mapped_column(
-        SAEnum(ProblemDifficulty, native_enum=False, values_callable=lambda x: [e.value for e in x]),
+        SAEnum(
+            ProblemDifficulty, native_enum=False, values_callable=lambda x: [e.value for e in x]
+        ),
         default=ProblemDifficulty.EASY,
         index=True,
         nullable=False,
@@ -83,7 +86,7 @@ class Problem(Base):
         nullable=False,
         comment="Execution memory limit in megabytes (MB)",
     )
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
@@ -106,7 +109,7 @@ class Problem(Base):
         nullable=False,
         index=True,
     )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+    deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -119,12 +122,12 @@ class Problem(Base):
     )
 
     # Relationships
-    test_cases: Mapped[List["TestCase"]] = relationship(
+    test_cases: Mapped[list["TestCase"]] = relationship(
         back_populates="problem",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    submissions: Mapped[List["Submission"]] = relationship(
+    submissions: Mapped[list["Submission"]] = relationship(
         back_populates="problem",
         cascade="all, delete-orphan",
         passive_deletes=True,

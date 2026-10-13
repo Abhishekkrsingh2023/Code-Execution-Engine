@@ -10,7 +10,9 @@ Provides test fixtures for:
 import asyncio
 import pathlib
 import shutil
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable, Coroutine, Generator
+from datetime import datetime
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -43,13 +45,14 @@ TestingSessionLocal = async_sessionmaker(
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_database():
+def setup_test_database() -> Generator[None]:
     """Session-scoped fixture to create all tables in the test database once."""
-    async def _init():
+
+    async def _init() -> None:
         async with test_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-    async def _teardown():
+    async def _teardown() -> None:
         await test_engine.dispose()
 
     asyncio.run(_init())
@@ -58,9 +61,9 @@ def setup_test_database():
 
 
 @pytest_asyncio.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
+async def db_session() -> AsyncGenerator[AsyncSession]:
     """Provides a clean database session for each test.
-    
+
     Truncates/deletes all rows from all tables after each test to guarantee complete isolation.
     """
     async with TestingSessionLocal() as session:
@@ -72,12 +75,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     """Provides an httpx.AsyncClient using ASGITransport bound to the FastAPI app.
-    
+
     Overrides the database dependency to use the isolated test session.
     """
-    async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
+
+    async def _override_get_db() -> AsyncGenerator[AsyncSession]:
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
@@ -90,7 +94,7 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def cleanup_code_storage():
+async def cleanup_code_storage() -> AsyncGenerator[None]:
     """Cleans up any temporary code submission folders created in app/code during tests."""
     code_dir = pathlib.Path(__file__).parent.parent / "app" / "code"
     yield
@@ -103,7 +107,7 @@ async def cleanup_code_storage():
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def redis_client():
+async def redis_client() -> AsyncGenerator[Any]:
     """Provides the async Redis client and flushes test keys and connection pool after each test."""
     client = get_async_redis_client()
     yield client
@@ -119,8 +123,13 @@ async def redis_client():
         await client.connection_pool.disconnect()
 
 
+CreateUserCallable = Callable[..., Coroutine[Any, Any, User]]
+
+
 @pytest_asyncio.fixture
-async def create_user(db_session: AsyncSession):
+async def create_user(
+    db_session: AsyncSession,
+) -> CreateUserCallable:
     """Factory fixture to quickly create and persist test users with custom attributes."""
     from app.models.user import User, UserRole, UserStatus
     from app.utils.security import hash_password
@@ -134,7 +143,7 @@ async def create_user(db_session: AsyncSession):
         is_email_verified: bool = True,
         is_protected: bool = False,
         otp: str | None = None,
-        otp_expires_at=None,
+        otp_expires_at: datetime | None = None,
     ) -> User:
         user = User(
             username=username,
@@ -156,9 +165,10 @@ async def create_user(db_session: AsyncSession):
 
 
 @pytest_asyncio.fixture
-async def admin_user(create_user) -> "User":
+async def admin_user(create_user: CreateUserCallable) -> "User":
     """Fixture providing a default administrator user."""
     from app.models.user import UserRole
+
     return await create_user(
         username="superadmin",
         email="admin@example.com",
@@ -167,9 +177,10 @@ async def admin_user(create_user) -> "User":
 
 
 @pytest_asyncio.fixture
-async def moderator_user(create_user) -> "User":
+async def moderator_user(create_user: CreateUserCallable) -> "User":
     """Fixture providing a default moderator user."""
     from app.models.user import UserRole
+
     return await create_user(
         username="mod_user",
         email="mod@example.com",
@@ -178,13 +189,12 @@ async def moderator_user(create_user) -> "User":
 
 
 @pytest_asyncio.fixture
-async def normal_user(create_user) -> "User":
+async def normal_user(create_user: CreateUserCallable) -> "User":
     """Fixture providing a standard user."""
     from app.models.user import UserRole
+
     return await create_user(
         username="norm_user",
         email="user@example.com",
         role=UserRole.USER,
     )
-
-

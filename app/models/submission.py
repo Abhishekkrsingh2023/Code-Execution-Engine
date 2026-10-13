@@ -1,9 +1,10 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,7 +59,9 @@ class Submission(Base):
         nullable=False,
     )
     language: Mapped[SubmissionLanguage] = mapped_column(
-        SAEnum(SubmissionLanguage, native_enum=False, values_callable=lambda x: [e.value for e in x]),
+        SAEnum(
+            SubmissionLanguage, native_enum=False, values_callable=lambda x: [e.value for e in x]
+        ),
         nullable=False,
     )
     source_code: Mapped[str] = mapped_column(
@@ -71,12 +74,12 @@ class Submission(Base):
         index=True,
         nullable=False,
     )
-    execution_time: Mapped[Optional[float]] = mapped_column(
+    execution_time: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
         comment="Total execution time in seconds",
     )
-    memory_used: Mapped[Optional[float]] = mapped_column(
+    memory_used: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
         comment="Peak memory used in megabytes (MB)",
@@ -95,7 +98,7 @@ class Submission(Base):
     problem: Mapped["Problem"] = relationship(
         back_populates="submissions",
     )
-    submission_results: Mapped[List["SubmissionResult"]] = relationship(
+    submission_results: Mapped[list["SubmissionResult"]] = relationship(
         back_populates="submission",
         cascade="all, delete-orphan",
         passive_deletes=True,
