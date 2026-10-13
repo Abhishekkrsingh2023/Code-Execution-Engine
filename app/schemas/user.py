@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.user import UserRole
+from app.models.user import UserRole, UserStatus
 
 
 class UserRegisterRequest(BaseModel):
@@ -176,7 +176,9 @@ class UserResponse(BaseModel):
         username (str): User handle.
         email (EmailStr): User email address.
         role (UserRole): Role assigned to user.
+        status (UserStatus): Account status (active, inactive, suspended).
         is_email_verified (bool): Indicates if the user's email has been verified.
+        is_protected (bool): Indicates if account is a protected system account.
         has_password (bool): Indicates if the account has a password set.
         created_at (datetime): Account creation timestamp in UTC.
     """
@@ -184,7 +186,9 @@ class UserResponse(BaseModel):
     username: str = Field(..., description="User handle.")
     email: EmailStr = Field(..., description="User email address.")
     role: UserRole = Field(..., description="Role assigned to user.")
+    status: UserStatus = Field(default=UserStatus.ACTIVE, description="Account status.")
     is_email_verified: bool = Field(default=False, description="Indicates whether the user's email has been verified.")
+    is_protected: bool = Field(default=False, description="Indicates whether the account is a protected system account.")
     has_password: bool = Field(..., description="Indicates whether the account has a password set.")
     created_at: datetime = Field(..., description="Account creation timestamp in UTC.")
 
@@ -202,10 +206,14 @@ class UserLoginResponse(BaseModel):
         message (str): Informational status message.
         user (UserResponse): Profile details of the authenticated user.
         auth_method (str): Authentication method utilized ('password' or 'otp').
+        access_token (Optional[str]): Bearer token for authenticating subsequent requests.
+        token_type (str): Token type ('bearer').
     """
     message: str = Field(..., description="Status message.")
     user: UserResponse = Field(..., description="Profile details of the authenticated user.")
     auth_method: str = Field(..., description="Authentication method utilized ('password' or 'otp').")
+    access_token: str | None = Field(None, description="Bearer token (UUID string) for authentication.")
+    token_type: str = Field("bearer", description="Token type.")
 
 
 class OTPResponse(BaseModel):

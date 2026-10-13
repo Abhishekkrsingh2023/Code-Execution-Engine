@@ -8,7 +8,7 @@ from loguru import logger
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
     MessageResponse,
     OTPResponse,
@@ -148,11 +148,20 @@ async def handle_login_user(
             detail="Email address is not verified. Please verify your email via OTP before logging in.",
         )
 
+    if user.status != UserStatus.ACTIVE:
+        logger.warning("Login rejected for non-active user: {}", user.username)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account is {user.status.value}. Please contact support.",
+        )
+
     logger.info("User '{}' authenticated successfully via password", user.username)
     return UserLoginResponse(
         message="Login successful.",
         user=UserResponse.model_validate(user),
         auth_method="password",
+        access_token=str(user.id),
+        token_type="bearer",
     )
 
 
@@ -282,6 +291,8 @@ async def handle_verify_otp(
         message="OTP verified successfully. Email verified and login granted.",
         user=UserResponse.model_validate(user),
         auth_method="otp",
+        access_token=str(user.id),
+        token_type="bearer",
     )
 
 

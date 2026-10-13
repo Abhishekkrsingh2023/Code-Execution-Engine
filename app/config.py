@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # Debugging — set SQL_ECHO=true in .env to log queries (never enable in production)
     SQL_ECHO: bool = False
 
+    # Logging
+    LOG_FILE_PATH: str = "logs/audit.log"
+    LOG_ROTATION: str = "10 MB"
+    LOG_RETENTION: str = "30 days"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -1,0 +1,180 @@
+import json
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.database import SessionLocal
+from app.models.audit_log import AuditLog, AuditLogAction, AuditLogStatus
+
+SENSITIVE_KEYS = {
+    "password",
+    "password_hash",
+    "plain_password",
+    "token",
+    "access_token",
+    "refresh_token",
+    "otp",
+    "secret",
+    "authorization",
+    "api_key",
+    "credit_card",
+}
+
+_audit_sink_id: Optional[int] = None
+
+
+def to_str_val(val: Any) -> str:
+    """Safely converts enum, string, or arbitrary value to string representation."""
+    if val is None:
+        return ""
+    if hasattr(val, "value"):
+        return str(val.value)
+    return str(val)
+
+
+
+def sanitize_details(data: Any) -> Any:
+    """Recursively scrub sensitive fields like passwords, tokens, and OTPs."""
+    if isinstance(data, dict):
+        cleaned = {}
+        for k, v in data.items():
+            if any(sensitive in str(k).lower() for sensitive in SENSITIVE_KEYS):
+                cleaned[k] = "[REDACTED]"
+            else:
+                cleaned[k] = sanitize_details(v)
+        return cleaned
+    elif isinstance(data, (list, tuple)):
+        return [sanitize_details(item) for item in data]
+    return data
+
+
+def setup_audit_logger(
+    log_file: Optional[str | Path] = None,
+    rotation: Optional[str] = None,
+    retention: Optional[str] = None,
+    level: str = "INFO",
+) -> int:
+    """Configures file-based logging for audit events using loguru with rotation and retention.
+
+    Prevents duplicate log entries by tracking and removing previous audit sinks.
+    """
+    global _audit_sink_id
+    file_path = Path(log_file or settings.LOG_FILE_PATH)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    rot = rotation or settings.LOG_ROTATION
+    ret = retention or settings.LOG_RETENTION
+
+    # Deduplication: remove existing sink if already registered
+    if _audit_sink_id is not None:
+        try:
+            logger.remove(_audit_sink_id)
+        except ValueError:
+            pass
+        _audit_sink_id = None
+
+    sink_id = logger.add(
+        str(file_path),
+        filter=lambda record: record["extra"].get("audit", False) is True,
+        rotation=rot,
+        retention=ret,
+        level=level,
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {extra[audit_action]} | {message}",
+        enqueue=False,
+    )
+    _audit_sink_id = sink_id
+    return sink_id
+
+
+async def log_audit_event(
+    db: Optional[AsyncSession] = None,
+    *,
+    action: str,
+    actor_id: Optional[uuid.UUID] = None,
+    actor_username: Optional[str] = None,
+    actor_role: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+    status: str = AuditLogStatus.SUCCESS.value,
+    details: Optional[dict[str, Any]] = None,
+    error_message: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> AuditLog:
+    """Records an audit event in both loguru file-based storage and the database.
+
+    Guarantees:
+    - Sensitive information (passwords, tokens, OTPs) is scrubbed.
+    - Loguru writes to file with structured metadata.
+    - Audit entry is saved in the database even on failure paths.
+    """
+    sanitized_details = sanitize_details(details) if details else None
+
+    # 1. File-based logging with loguru
+    log_extra = {
+        "audit": True,
+        "audit_action": action,
+        "actor": actor_username or (str(actor_id) if actor_id else "anonymous"),
+        "target": f"{target_type}:{target_id}" if target_type else "system",
+        "status": status,
+    }
+
+    log_entry_payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "action": action,
+        "actor_id": str(actor_id) if actor_id else None,
+        "actor_username": actor_username,
+        "actor_role": actor_role,
+        "target_type": target_type,
+        "target_id": target_id,
+        "status": status,
+        "details": sanitized_details,
+        "error_message": error_message,
+        "ip_address": ip_address,
+    }
+    json_msg = json.dumps(log_entry_payload, default=str)
+
+    if status == AuditLogStatus.SUCCESS.value:
+        logger.bind(**log_extra).info(json_msg)
+    elif status == AuditLogStatus.FAILURE.value:
+        logger.bind(**log_extra).warning(json_msg)
+    else:
+        logger.bind(**log_extra).error(json_msg)
+
+    # 2. Database audit entry persistence
+    audit_entry = AuditLog(
+        actor_id=actor_id,
+        actor_username=actor_username,
+        actor_role=actor_role,
+        action=action,
+        target_type=target_type,
+        target_id=str(target_id) if target_id is not None else None,
+        status=status,
+        details=sanitized_details,
+        error_message=error_message,
+        ip_address=ip_address,
+    )
+
+    if db is not None:
+        try:
+            db.add(audit_entry)
+            await db.commit()
+            await db.refresh(audit_entry)
+            return audit_entry
+        except Exception as exc:
+            logger.warning("Failed to persist audit log using active session: {}. Retrying with fresh session.", exc)
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+
+    # Fallback to independent session to ensure failure entries are always saved
+    async with SessionLocal() as fresh_db:
+        fresh_db.add(audit_entry)
+        await fresh_db.commit()
+        await fresh_db.refresh(audit_entry)
+        return audit_entry

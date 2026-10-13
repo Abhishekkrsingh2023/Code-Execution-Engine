@@ -22,6 +22,7 @@ import app.models  # Ensure all models are registered with Base.metadata
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+from app.models.user import User
 from app.redis_client import get_async_redis_client
 
 # Define test database URL pointing to the isolated test database
@@ -121,7 +122,7 @@ async def redis_client():
 @pytest_asyncio.fixture
 async def create_user(db_session: AsyncSession):
     """Factory fixture to quickly create and persist test users with custom attributes."""
-    from app.models.user import User, UserRole
+    from app.models.user import User, UserRole, UserStatus
     from app.utils.security import hash_password
 
     async def _create(
@@ -129,7 +130,9 @@ async def create_user(db_session: AsyncSession):
         email: str = "testuser@example.com",
         password: str | None = "Password123!",
         role: UserRole = UserRole.USER,
+        status: UserStatus = UserStatus.ACTIVE,
         is_email_verified: bool = True,
+        is_protected: bool = False,
         otp: str | None = None,
         otp_expires_at=None,
     ) -> User:
@@ -138,7 +141,9 @@ async def create_user(db_session: AsyncSession):
             email=email,
             password_hash=hash_password(password) if password else None,
             role=role,
+            status=status,
             is_email_verified=is_email_verified,
+            is_protected=is_protected,
             otp=otp,
             otp_expires_at=otp_expires_at,
         )
@@ -148,4 +153,38 @@ async def create_user(db_session: AsyncSession):
         return user
 
     return _create
+
+
+@pytest_asyncio.fixture
+async def admin_user(create_user) -> "User":
+    """Fixture providing a default administrator user."""
+    from app.models.user import UserRole
+    return await create_user(
+        username="superadmin",
+        email="admin@example.com",
+        role=UserRole.ADMIN,
+    )
+
+
+@pytest_asyncio.fixture
+async def moderator_user(create_user) -> "User":
+    """Fixture providing a default moderator user."""
+    from app.models.user import UserRole
+    return await create_user(
+        username="mod_user",
+        email="mod@example.com",
+        role=UserRole.MODERATOR,
+    )
+
+
+@pytest_asyncio.fixture
+async def normal_user(create_user) -> "User":
+    """Fixture providing a standard user."""
+    from app.models.user import UserRole
+    return await create_user(
+        username="norm_user",
+        email="user@example.com",
+        role=UserRole.USER,
+    )
+
 
