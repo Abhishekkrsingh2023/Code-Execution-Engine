@@ -501,6 +501,28 @@ Running untrusted user-submitted code requires rigorous sandboxing:
 
 ---
 
+## 🧪 Testing
+
+The project uses `pytest` and `pytest-asyncio` orchestrated via `uv`.
+Tests run against an isolated PostgreSQL test database (`code_buddy_test`) and Redis with automatic cleanup fixtures:
+
+```bash
+# Ensure services are up
+docker compose up -d
+
+# Run all tests
+uv run pytest -v
+
+# Run individual route test suites
+uv run pytest tests/test_root_routes.py -v
+uv run pytest tests/test_code_routes.py -v
+uv run pytest tests/test_user_routes.py -v
+```
+
+For complete details on test architecture, fixtures, and coverage, see [tests/README.md](tests/README.md).
+
+---
+
 ## 👤 Author
 
 Developed by **Abhishek** ([@Abhishekkrsingh2023](https://github.com/Abhishekkrsingh2023)).
