@@ -12,6 +12,8 @@ from app.controllers.user_controller import (
     handle_verify_otp,
 )
 from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.user import User
 from app.schemas.user import (
     MessageResponse,
     OTPResponse,
@@ -105,6 +107,25 @@ async def login_user(
         HTTPException: 403 if the user's email is not verified yet.
     """
     return await handle_login_user(payload=payload, db=db, response=response)
+
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get currently authenticated user profile",
+    description="Retrieves the authenticated user profile using HTTP-only cookies or Authorization header.",
+    responses={
+        200: {"description": "Authenticated user profile."},
+        401: {"description": "Unauthenticated."},
+        403: {"description": "Account suspended or deactivated."},
+    },
+)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
+    """Returns the profile of the authenticated user from cookies or Authorization header."""
+    return UserResponse.model_validate(current_user)
 
 
 @router.post(

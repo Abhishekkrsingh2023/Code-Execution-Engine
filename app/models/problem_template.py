@@ -22,7 +22,9 @@ class CommonProblemTemplate(Base):
 
     templates: Mapped[list["ProblemTemplate"]] = relationship(
         back_populates="common",
+        cascade="all, delete-orphan",
         passive_deletes=True,
+        lazy="selectin",
     )
 
 
@@ -35,8 +37,7 @@ class ProblemTemplate(Base):
         primary_key=True,
     )
     language: Mapped[str] = mapped_column(String(20), primary_key=True)
-    user_code: Mapped[str] = mapped_column(Text, nullable=False)
-    main_code: Mapped[str] = mapped_column(Text, nullable=False)
+    boilerplate_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow

@@ -208,6 +208,23 @@ class TestCookieAuthentication:
         data = response.json()
         assert "users" in data
 
+    async def test_get_current_user_profile_via_cookie(
+        self,
+        async_client: AsyncClient,
+        moderator_user: User,
+    ) -> None:
+        """GET /api-v1/users/me returns authenticated user profile via cookie."""
+        access_token = create_access_token(user_id=moderator_user.id, role=moderator_user.role)
+
+        response = await async_client.get(
+            "/api-v1/users/me",
+            headers={"Cookie": f"{settings.ACCESS_TOKEN_COOKIE_NAME}={access_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["username"] == moderator_user.username
+        assert data["role"] == "moderator"
+
     async def test_refresh_token_cookie_rejected_on_protected_route(
         self,
         async_client: AsyncClient,

@@ -126,6 +126,7 @@ class Problem(Base):
         back_populates="problem",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        lazy="selectin",
     )
     submissions: Mapped[list["Submission"]] = relationship(
         back_populates="problem",

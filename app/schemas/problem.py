@@ -135,3 +135,138 @@ class ProblemListResponse(BaseModel):
     skip: int = Field(..., description="Offset.")
     limit: int = Field(..., description="Page limit.")
     problems: list[ProblemResponse] = Field(..., description="List of problems.")
+
+
+class TestCaseCreateItem(BaseModel):
+    """Schema for individual test case item."""
+
+    input: str = Field(..., description="Standard input string.")
+    expected_output: str = Field(..., description="Expected output string.")
+    is_sample: bool = Field(
+        default=False, description="Flag indicating if this is a sample/run test case."
+    )
+    weight: float = Field(default=1.0, description="Score weight for this test case.")
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class TestCaseResponse(BaseModel):
+    """Public representation of a test case."""
+
+    id: int = Field(..., description="Unique test case identifier.")
+    problem_id: int = Field(..., description="Associated problem ID.")
+    input: str = Field(..., description="Standard input.")
+    expected_output: str = Field(..., description="Expected output.")
+    is_sample: bool = Field(..., description="Whether this is a sample test case.")
+    weight: float = Field(..., description="Score weight.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProblemTemplateItem(BaseModel):
+    """Schema for a language problem template item."""
+
+    language: str = Field(..., max_length=20, description="Programming language (e.g. python, cpp).")
+    boilerplate_code: str | None = Field(default=None, description="Starter boilerplate code for user, if any.")
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ProblemTemplateResponse(BaseModel):
+    """Public representation of a problem template."""
+
+    problem_id: str = Field(..., description="4-character problem ID.")
+    language: str = Field(..., description="Programming language.")
+    boilerplate_code: str | None = Field(default=None, description="Starter boilerplate code.")
+    created_at: datetime = Field(..., description="Creation timestamp in UTC.")
+    updated_at: datetime = Field(..., description="Last update timestamp in UTC.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommonProblemTemplateCreateRequest(BaseModel):
+    """Schema for creating or updating a common problem template."""
+
+    problem_id: str = Field(..., min_length=1, max_length=4, description="4-character problem identifier.")
+    problem_statement: str = Field(..., min_length=5, description="Problem statement text or markdown.")
+    time_limit: float = Field(default=2.0, ge=0.1, le=30.0, description="Time limit in seconds.")
+    run_test_cases: list[dict] = Field(
+        default_factory=list, description="List of run/sample test cases [{input, expected_output}]."
+    )
+    submit_test_cases: list[dict] = Field(
+        default_factory=list, description="List of hidden/submit test cases [{input, expected_output}]."
+    )
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CommonProblemTemplateResponse(BaseModel):
+    """Public representation of a common problem template."""
+
+    problem_id: str = Field(..., description="4-character problem identifier.")
+    problem_statement: str = Field(..., description="Problem statement text.")
+    time_limit: float = Field(..., description="Execution time limit in seconds.")
+    run_test_cases: list[dict] = Field(..., description="Run test cases.")
+    submit_test_cases: list[dict] = Field(..., description="Submit test cases.")
+    created_at: datetime = Field(..., description="Creation timestamp in UTC.")
+    updated_at: datetime = Field(..., description="Last update timestamp in UTC.")
+    templates: list[ProblemTemplateResponse] = Field(
+        default_factory=list, description="Associated language problem templates."
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FullProblemCreateRequest(BaseModel):
+    """Unified schema for creating problem, common problem template, language templates, and test cases."""
+
+    # Problem fields
+    title: str = Field(..., min_length=3, max_length=255, description="Problem title.")
+    description: str = Field(..., min_length=5, description="Detailed problem statement.")
+    difficulty: ProblemDifficulty = Field(
+        default=ProblemDifficulty.EASY, description="Difficulty level."
+    )
+    category: str = Field(default="General", max_length=100, description="Category.")
+    topic: str = Field(default="General", max_length=100, description="Topic tag.")
+    time_limit: float = Field(default=2.0, ge=0.1, le=30.0, description="Time limit in seconds.")
+    memory_limit: int = Field(default=256, ge=16, le=2048, description="Memory limit in MB.")
+    status: ProblemStatus = Field(default=ProblemStatus.PUBLISHED, description="Publication status.")
+
+    # 4-character ID for common_problem_templates (optional, auto-generated if omitted)
+    problem_code: str | None = Field(
+        None, max_length=4, description="Custom 4-character problem ID for templates."
+    )
+
+    # Test cases: Common run & submit
+    run_test_cases: list[dict] = Field(
+        default_factory=list, description="Run/sample test cases [{input, expected_output}]."
+    )
+    submit_test_cases: list[dict] = Field(
+        default_factory=list, description="Submit/hidden test cases [{input, expected_output}]."
+    )
+
+    # Multi-language templates
+    templates: list[ProblemTemplateItem] = Field(
+        default_factory=list, description="Language-specific starter and driver templates."
+    )
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+
+class FullProblemResponse(BaseModel):
+    """Detailed response containing problem, test cases, and templates."""
+
+    problem: ProblemResponse = Field(..., description="Problem core details.")
+    problem_code: str = Field(..., description="4-character problem ID in template system.")
+    run_test_cases: list[dict] = Field(default_factory=list, description="Run test cases.")
+    submit_test_cases: list[dict] = Field(default_factory=list, description="Submit test cases.")
+    templates: list[ProblemTemplateResponse] = Field(
+        default_factory=list, description="Language problem templates."
+    )
+    test_cases_count: int = Field(default=0, description="Total test cases in database.")
+
+    model_config = ConfigDict(from_attributes=True)

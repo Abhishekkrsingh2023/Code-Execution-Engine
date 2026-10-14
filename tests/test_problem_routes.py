@@ -262,3 +262,72 @@ class TestPublicProblemListingAndFiltering:
         data = response.json()
         assert data["total"] == 1
         assert data["problems"][0]["title"] == "Fibonacci Number"
+
+    async def test_create_full_problem_with_templates_and_test_cases(
+        self,
+        async_client: AsyncClient,
+        moderator_user: User,
+        db_session: AsyncSession,
+    ) -> None:
+        """Moderator can create a full problem with run test cases, submit test cases, and templates."""
+        payload = {
+            "title": "Valid Palindrome",
+            "description": "Determine if a string is a palindrome, ignoring non-alphanumeric chars.",
+            "difficulty": "easy",
+            "category": "Strings",
+            "topic": "two_pointers",
+            "time_limit": 1.5,
+            "memory_limit": 128,
+            "status": "published",
+            "problem_code": "0002",
+            "run_test_cases": [
+                {"input": "race a car", "expected_output": "false"},
+                {"input": "A man, a plan, a canal: Panama", "expected_output": "true"},
+            ],
+            "submit_test_cases": [
+                {"input": " ", "expected_output": "true", "weight": 1.0},
+                {"input": "0P", "expected_output": "false", "weight": 2.0},
+            ],
+            "templates": [
+                {
+                    "language": "python",
+                    "boilerplate_code": "class Solution:\n    def isPalindrome(self, s: str) -> bool:\n        pass",
+                },
+                {
+                    "language": "cpp",
+                    "boilerplate_code": "class Solution {\npublic:\n    bool isPalindrome(string s) {\n        return true;\n    }\n};",
+                },
+            ],
+        }
+
+        response = await async_client.post(
+            "/api-v1/problems/full",
+            json=payload,
+            headers={"Authorization": f"Bearer {moderator_user.id}"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["problem"]["title"] == "Valid Palindrome"
+        assert data["problem_code"] == "0002"
+        assert len(data["run_test_cases"]) == 2
+        assert len(data["submit_test_cases"]) == 2
+        assert len(data["templates"]) == 2
+        assert data["templates"][0]["boilerplate_code"] == "class Solution:\n    def isPalindrome(self, s: str) -> bool:\n        pass"
+        assert data["test_cases_count"] == 4
+
+        # Test GET /api-v1/problems/{id}/full
+        problem_id = data["problem"]["id"]
+        get_res = await async_client.get(f"/api-v1/problems/{problem_id}/full")
+        assert get_res.status_code == 200
+        get_data = get_res.json()
+        assert get_data["problem"]["id"] == problem_id
+        assert len(get_data["run_test_cases"]) == 2
+        assert len(get_data["submit_test_cases"]) == 2
+        assert len(get_data["templates"]) == 2
+        assert get_data["templates"][0]["boilerplate_code"] is not None
+
+        # Test GET /api-v1/problems/templates/common
+        tmpl_res = await async_client.get("/api-v1/problems/templates/common")
+        assert tmpl_res.status_code == 200
+        tmpls = tmpl_res.json()
+        assert any(t["problem_id"] == "0002" for t in tmpls)

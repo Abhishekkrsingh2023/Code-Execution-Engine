@@ -2,9 +2,15 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.problem_controller import (
+    handle_create_full_problem,
+    handle_create_or_update_common_template,
     handle_create_problem,
     handle_delete_problem,
+    handle_get_common_template,
+    handle_get_full_problem,
     handle_get_problem,
+    handle_get_problem_test_cases,
+    handle_list_common_templates,
     handle_list_problems,
     handle_update_problem,
     handle_update_problem_status,
@@ -14,11 +20,16 @@ from app.dependencies import require_moderator_or_admin
 from app.models.problem import ProblemDifficulty, ProblemStatus
 from app.models.user import User
 from app.schemas.problem import (
+    CommonProblemTemplateCreateRequest,
+    CommonProblemTemplateResponse,
+    FullProblemCreateRequest,
+    FullProblemResponse,
     ProblemCreateRequest,
     ProblemListResponse,
     ProblemResponse,
     ProblemStatusUpdateRequest,
     ProblemUpdateRequest,
+    TestCaseResponse,
 )
 from app.schemas.user import MessageResponse
 
@@ -84,6 +95,75 @@ async def list_problems(
     )
 
 
+@router.post(
+    "/full",
+    response_model=FullProblemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create full problem with templates and test cases (Moderator or Admin)",
+)
+async def create_full_problem(
+    payload: FullProblemCreateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_moderator_or_admin),
+) -> FullProblemResponse:
+    """Creates a problem, common problem template, language templates, and test cases atomically."""
+    return await handle_create_full_problem(
+        user=current_user,
+        payload=payload,
+        request=request,
+        db=db,
+    )
+
+
+@router.get(
+    "/templates/common",
+    response_model=list[CommonProblemTemplateResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List all common problem templates",
+)
+async def list_common_templates(
+    db: AsyncSession = Depends(get_db),
+) -> list[CommonProblemTemplateResponse]:
+    """Retrieves all common problem templates with run and submit test cases."""
+    return await handle_list_common_templates(db=db)
+
+
+@router.get(
+    "/templates/common/{problem_id}",
+    response_model=CommonProblemTemplateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get common problem template by 4-character ID",
+)
+async def get_common_template(
+    problem_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> CommonProblemTemplateResponse:
+    """Retrieves a common problem template by its 4-character identifier."""
+    return await handle_get_common_template(problem_id=problem_id, db=db)
+
+
+@router.post(
+    "/templates/common",
+    response_model=CommonProblemTemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create or update common problem template (Moderator or Admin)",
+)
+async def create_or_update_common_template(
+    payload: CommonProblemTemplateCreateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_moderator_or_admin),
+) -> CommonProblemTemplateResponse:
+    """Creates or updates common problem template with run/submit test cases."""
+    return await handle_create_or_update_common_template(
+        payload=payload,
+        user=current_user,
+        request=request,
+        db=db,
+    )
+
+
 @router.get(
     "/{problem_id}",
     response_model=ProblemResponse,
@@ -96,6 +176,34 @@ async def get_problem(
 ) -> ProblemResponse:
     """Retrieves single problem details by ID."""
     return await handle_get_problem(problem_id=problem_id, db=db)
+
+
+@router.get(
+    "/{problem_id}/full",
+    response_model=FullProblemResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get full problem with templates and test cases",
+)
+async def get_full_problem(
+    problem_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> FullProblemResponse:
+    """Retrieves complete problem definition including run/submit test cases and templates."""
+    return await handle_get_full_problem(problem_id=problem_id, db=db)
+
+
+@router.get(
+    "/{problem_id}/test-cases",
+    response_model=list[TestCaseResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get test cases for a problem",
+)
+async def get_problem_test_cases(
+    problem_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> list[TestCaseResponse]:
+    """Retrieves test cases associated with a problem."""
+    return await handle_get_problem_test_cases(problem_id=problem_id, db=db)
 
 
 @router.patch(
