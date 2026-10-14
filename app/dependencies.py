@@ -4,8 +4,10 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.models.user import User, UserRole, UserStatus
+from app.utils.jwt import verify_access_token
 
 
 async def get_current_user(
@@ -14,25 +16,38 @@ async def get_current_user(
     x_user_id: str | None = Header(None, alias="X-User-Id", description="User UUID primary key"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Dependency to extract and validate the authenticated user from request headers.
+    """Dependency to extract and validate the authenticated user from request cookies or headers.
 
-    Accepts:
-    - Authorization: Bearer <user_uuid>
-    - X-User-Id: <user_uuid>
+    Extraction Priority:
+    1. HTTP-Only Cookie: access_token
+    2. Header: Authorization: Bearer <jwt_access_token | user_uuid>
+    3. Header: X-User-Id: <user_uuid>
+
+    Token Validation:
+    - Decodes and validates JWT signature, expiration, and claims.
+    - Strictly enforces token type == 'access'. Never accepts a refresh token.
+    - Preserves backwards compatibility for raw UUID identifiers in headers.
 
     Raises:
-    - 401 UNAUTHORIZED if missing, malformed, or user not found.
+    - 401 UNAUTHORIZED if missing, expired, invalid, or user not found.
     - 403 FORBIDDEN if user account is deactivated or suspended.
     """
     token: str | None = None
 
-    if authorization:
+    # 1. Check HTTP cookie first (Cookie-based authentication)
+    cookie_token = request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+    if cookie_token:
+        token = cookie_token.strip()
+
+    # 2. Check Authorization header
+    if not token and authorization:
         parts = authorization.strip().split()
         if len(parts) == 2 and parts[0].lower() == "bearer":
             token = parts[1]
         elif len(parts) == 1:
             token = parts[0]
 
+    # 3. Check X-User-Id fallback header
     if not token and x_user_id:
         token = x_user_id.strip()
 
@@ -43,14 +58,29 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    try:
-        user_uuid = uuid.UUID(token)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token format.",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
+    user_uuid: uuid.UUID
+    # Determine if token is a JWT (typically 3 dot-separated base64 segments)
+    if token.count(".") == 2:
+        payload = verify_access_token(token)
+        sub = payload.get("sub")
+        try:
+            user_uuid = uuid.UUID(sub)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid user identifier claim in token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from None
+    else:
+        # Fallback to direct UUID parsing for legacy header authentication
+        try:
+            user_uuid = uuid.UUID(token)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token format.",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from None
 
     stmt = select(User).where(User.id == user_uuid)
     result = await db.execute(stmt)

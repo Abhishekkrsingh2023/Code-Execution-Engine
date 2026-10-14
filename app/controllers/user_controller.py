@@ -1,32 +1,39 @@
 import re
 import secrets
-import uuid
 from datetime import UTC, datetime
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, Response, status
 from loguru import logger
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.user import (
     MessageResponse,
     OTPResponse,
+    RefreshTokenRequest,
     RequestOTPRequest,
-    UserListResponse,
+    TokenRefreshResponse,
     UserLoginRequest,
     UserLoginResponse,
     UsernameAvailabilityResponse,
     UserRegisterRequest,
     UserResponse,
-    UserUpdateRequest,
     VerifyOTPRequest,
 )
+from app.utils.cookies import clear_auth_cookies, set_auth_cookies
+from app.utils.jwt import create_access_token, create_refresh_token, decode_jwt_token
 from app.utils.security import (
     generate_otp,
     get_otp_expiry,
     hash_password,
     verify_password,
+)
+from app.utils.token_service import (
+    revoke_refresh_token,
+    rotate_refresh_token,
+    store_refresh_token,
 )
 
 
@@ -106,21 +113,24 @@ async def handle_register_user(
 async def handle_login_user(
     payload: UserLoginRequest,
     db: AsyncSession,
+    response: Response | None = None,
 ) -> UserLoginResponse:
     """_summary_
     Authenticates a user using traditional username/email and password credentials.
-    Enforces email verification requirement.
+    Enforces email verification requirement and issues short-lived JWT access token
+    and long-lived JWT refresh token, attaching both as HTTP-only cookies.
 
     Args:
         payload (UserLoginRequest): Login credentials (username/email and password).
         db (AsyncSession): Active database session.
+        response (Optional[Response]): FastAPI response object to attach cookies.
 
     Returns:
-        UserLoginResponse: Successful login message, user profile, and authentication method.
+        UserLoginResponse: Successful login message, user profile, and auth method.
 
     Raises:
         HTTPException: 401 if credentials are invalid or password is not set on the account.
-        HTTPException: 403 if user's email has not been verified yet.
+        HTTPException: 403 if user's email has not been verified yet or account is not active.
     """
     stmt = select(User).where(
         or_(
@@ -159,13 +169,27 @@ async def handle_login_user(
             detail=f"Account is {user.status.value}. Please contact support.",
         )
 
-    logger.info("User '{}' authenticated successfully via password", user.username)
+    # Issue JWT tokens
+    access_token = create_access_token(user_id=user.id, role=user.role)
+    refresh_token, jti, _ = create_refresh_token(user_id=user.id)
+
+    # Register active refresh token in Redis
+    await store_refresh_token(user_id=user.id, jti=jti)
+
+    # Set HTTP-only cookies if response object is provided
+    if response is not None:
+        set_auth_cookies(response, access_token=access_token, refresh_token=refresh_token)
+
+    logger.info(
+        "User '{}' (ID: {}) logged in via password. Access token and refresh token (jti={}) issued.",
+        user.username,
+        user.id,
+        jti,
+    )
     return UserLoginResponse(
         message="Login successful.",
         user=UserResponse.model_validate(user),
         auth_method="password",
-        access_token=str(user.id),
-        token_type="bearer",
     )
 
 
@@ -231,14 +255,17 @@ async def handle_request_otp(
 async def handle_verify_otp(
     payload: VerifyOTPRequest,
     db: AsyncSession,
+    response: Response | None = None,
 ) -> UserLoginResponse:
     """_summary_
     Verifies the provided 6-digit OTP against the user's stored passcode and expiry time.
     Marks the user's email as verified and invalidates the OTP upon success.
+    Issues short-lived JWT access token and long-lived JWT refresh token, attaching both as cookies.
 
     Args:
         payload (VerifyOTPRequest): Email address and 6-digit OTP.
         db (AsyncSession): Active database session.
+        response (Optional[Response]): FastAPI response object to attach cookies.
 
     Returns:
         UserLoginResponse: Successful login message, user profile, and authentication method.
@@ -292,44 +319,135 @@ async def handle_verify_otp(
     await db.commit()
     await db.refresh(user)
 
-    logger.info("User '{}' successfully verified and logged in via OTP", user.email)
+    # Issue JWT tokens
+    access_token = create_access_token(user_id=user.id, role=user.role)
+    refresh_token, jti, _ = create_refresh_token(user_id=user.id)
+
+    # Register active refresh token in Redis
+    await store_refresh_token(user_id=user.id, jti=jti)
+
+    # Set HTTP-only cookies if response object is provided
+    if response is not None:
+        set_auth_cookies(response, access_token=access_token, refresh_token=refresh_token)
+
+    logger.info(
+        "User '{}' (ID: {}) verified OTP. Access token and refresh token (jti={}) issued.",
+        user.email,
+        user.id,
+        jti,
+    )
     return UserLoginResponse(
         message="OTP verified successfully. Email verified and login granted.",
         user=UserResponse.model_validate(user),
         auth_method="otp",
-        access_token=str(user.id),
-        token_type="bearer",
     )
 
 
-async def handle_get_user_by_id(
-    user_id: uuid.UUID,
+async def handle_refresh_token(
+    request: Request,
+    response: Response,
     db: AsyncSession,
-) -> UserResponse:
+    payload: RefreshTokenRequest | None = None,
+) -> TokenRefreshResponse:
     """_summary_
-    Retrieves public profile details for a user by their UUID primary key.
+    Validates a JWT refresh token, executes token rotation, invalidates the previous token,
+    and returns a newly issued access token and rotated refresh token with updated cookies.
 
     Args:
-        user_id (uuid.UUID): Target user UUID.
+        request (Request): Incoming FastAPI request to read cookies or headers.
+        response (Response): FastAPI response to attach new rotated cookies.
         db (AsyncSession): Active database session.
+        payload (Optional[RefreshTokenRequest]): Optional body payload for non-cookie clients.
 
     Returns:
-        UserResponse: User profile details.
+        TokenRefreshResponse: Confirmation message of successful token rotation.
 
     Raises:
-        HTTPException: 404 if user is not found.
+        HTTPException: 401 if refresh token is missing, expired, revoked, or reused.
+        HTTPException: 403 if user account is deactivated or suspended.
     """
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    token_str: str | None = None
 
-    if user is None:
+    # 1. Cookie transport (preferred)
+    cookie_token = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    if cookie_token:
+        token_str = cookie_token.strip()
+
+    # 2. Payload transport (fallback for programmatic clients)
+    if not token_str and payload and payload.refresh_token:
+        token_str = payload.refresh_token.strip()
+
+    # 3. Header transport fallback
+    if not token_str:
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            parts = auth_header.strip().split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token_str = parts[1]
+            elif len(parts) == 1:
+                token_str = parts[0]
+
+    if not token_str:
+        logger.warning(
+            "Token refresh rejected: No refresh token provided in cookies, body, or headers."
+        )
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token is required in cookie or request body.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return UserResponse.model_validate(user)
+    new_access_token, new_refresh_token, user = await rotate_refresh_token(
+        raw_refresh_token=token_str,
+        db=db,
+    )
+
+    set_auth_cookies(response, access_token=new_access_token, refresh_token=new_refresh_token)
+
+    logger.info("Successfully refreshed tokens for user '{}' (ID: {})", user.username, user.id)
+    return TokenRefreshResponse(
+        message="Tokens refreshed successfully.",
+    )
+
+
+async def handle_logout_user(
+    request: Request,
+    response: Response,
+) -> MessageResponse:
+    """_summary_
+    Handles user logout by revoking the active refresh token in Redis and clearing authentication cookies.
+
+    Args:
+        request (Request): Incoming HTTP request to locate refresh token.
+        response (Response): HTTP response to clear cookies.
+
+    Returns:
+        MessageResponse: Confirmation message of successful logout.
+    """
+    token_str: str | None = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    if not token_str:
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            parts = auth_header.strip().split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token_str = parts[1]
+            elif len(parts) == 1:
+                token_str = parts[0]
+
+    if token_str and token_str.count(".") == 2:
+        try:
+            payload = decode_jwt_token(token_str)
+            user_id = payload.get("sub")
+            jti = payload.get("jti")
+            if user_id and jti:
+                await revoke_refresh_token(user_id=user_id, jti=jti, reason="logout")
+                logger.info("Revoked refresh token jti={} on logout for user_id={}", jti, user_id)
+        except Exception as exc:
+            logger.debug("Non-fatal: Could not decode token on logout: {}", exc)
+
+    clear_auth_cookies(response)
+    logger.info("User logged out successfully and auth cookies cleared.")
+    return MessageResponse(message="Successfully logged out.")
 
 
 async def handle_get_user_by_username(
@@ -396,154 +514,4 @@ async def handle_check_username_availability(
         username=clean_username,
         is_available=not is_taken,
         available=not is_taken,
-    )
-
-
-async def handle_list_users(
-    skip: int,
-    limit: int,
-    role: UserRole | None,
-    db: AsyncSession,
-) -> UserListResponse:
-    """_summary_
-    Retrieves a paginated list of users with optional role filtering.
-
-    Args:
-        skip (int): Number of records to skip (offset).
-        limit (int): Maximum records to return.
-        role (Optional[UserRole]): Filter by UserRole if specified.
-        db (AsyncSession): Active database session.
-
-    Returns:
-        UserListResponse: Total count, pagination parameters, and user list.
-    """
-    count_stmt = select(func.count(User.id))
-    query_stmt = select(User).order_by(User.created_at.desc()).offset(skip).limit(limit)
-
-    if role is not None:
-        count_stmt = count_stmt.where(User.role == role)
-        query_stmt = query_stmt.where(User.role == role)
-
-    total_result = await db.execute(count_stmt)
-    total = total_result.scalar_one()
-
-    users_result = await db.execute(query_stmt)
-    users = users_result.scalars().all()
-
-    return UserListResponse(
-        total=total,
-        skip=skip,
-        limit=limit,
-        users=[UserResponse.model_validate(u) for u in users],
-    )
-
-
-async def handle_update_user(
-    user_id: uuid.UUID,
-    payload: UserUpdateRequest,
-    db: AsyncSession,
-) -> UserResponse:
-    """_summary_
-    Updates profile attributes, role, or password for an existing user.
-    Enforces uniqueness constraints on modified username or email.
-
-    Args:
-        user_id (uuid.UUID): Target user UUID.
-        payload (UserUpdateRequest): Fields to update.
-        db (AsyncSession): Active database session.
-
-    Returns:
-        UserResponse: Updated user profile.
-
-    Raises:
-        HTTPException: 404 if user is not found.
-        HTTPException: 409 if requested username or email is already taken by another user.
-    """
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
-        )
-
-    # Check username collision if updating
-    if payload.username is not None and payload.username != user.username:
-        u_stmt = select(User.id).where(User.username == payload.username, User.id != user_id)
-        if (await db.execute(u_stmt)).scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Username '{payload.username}' is already taken.",
-            )
-        user.username = payload.username
-
-    # Check email collision if updating
-    if payload.email is not None and payload.email != user.email:
-        e_stmt = select(User.id).where(User.email == payload.email, User.id != user_id)
-        if (await db.execute(e_stmt)).scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Email '{payload.email}' is already registered.",
-            )
-        user.email = payload.email
-
-    if payload.password is not None:
-        user.password_hash = hash_password(payload.password)
-
-    if payload.role is not None:
-        user.role = payload.role
-
-    if payload.is_email_verified is not None:
-        user.is_email_verified = payload.is_email_verified
-
-    try:
-        await db.commit()
-        await db.refresh(user)
-        logger.info("Updated profile for user '{}' (ID: {})", user.username, user.id)
-        return UserResponse.model_validate(user)
-    except Exception as exc:
-        await db.rollback()
-        logger.exception("Failed to update user {}: {}", user_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update user profile.",
-        ) from exc
-
-
-async def handle_delete_user(
-    user_id: uuid.UUID,
-    db: AsyncSession,
-) -> MessageResponse:
-    """_summary_
-    Deletes a user account and cascades deletion to all associated records.
-
-    Args:
-        user_id (uuid.UUID): Target user UUID.
-        db (AsyncSession): Active database session.
-
-    Returns:
-        MessageResponse: Success confirmation message.
-
-    Raises:
-        HTTPException: 404 if user is not found.
-    """
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
-        )
-
-    username = user.username
-    await db.delete(user)
-    await db.commit()
-    logger.info("Deleted user '{}' (ID: {})", username, user_id)
-
-    return MessageResponse(
-        message=f"User '{username}' with ID '{user_id}' was successfully deleted."
     )

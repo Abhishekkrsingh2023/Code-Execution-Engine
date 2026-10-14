@@ -211,13 +211,12 @@ class UserResponse(BaseModel):
 class UserLoginResponse(BaseModel):
     """_summary_
     Response schema returned after successful authentication (via password or OTP).
+    Credentials/tokens are securely delivered via HTTP-only cookies.
 
     Attributes:
         message (str): Informational status message.
         user (UserResponse): Profile details of the authenticated user.
         auth_method (str): Authentication method utilized ('password' or 'otp').
-        access_token (Optional[str]): Bearer token for authenticating subsequent requests.
-        token_type (str): Token type ('bearer').
     """
 
     message: str = Field(..., description="Status message.")
@@ -225,10 +224,37 @@ class UserLoginResponse(BaseModel):
     auth_method: str = Field(
         ..., description="Authentication method utilized ('password' or 'otp')."
     )
-    access_token: str | None = Field(
-        None, description="Bearer token (UUID string) for authentication."
+
+
+class RefreshTokenRequest(BaseModel):
+    """_summary_
+    Request schema for refreshing JWT tokens when not using HTTP-only cookie transport.
+
+    Attributes:
+        refresh_token (Optional[str]): JWT refresh token string (optional if sent via cookie).
+    """
+
+    refresh_token: str | None = Field(
+        None,
+        description="Refresh token string (optional if provided via HTTP-only cookie).",
     )
-    token_type: str = Field("bearer", description="Token type.")
+
+    model_config = ConfigDict(
+        extra="ignore",
+        str_strip_whitespace=True,
+    )
+
+
+class TokenRefreshResponse(BaseModel):
+    """_summary_
+    Response schema returned after successful refresh-token rotation.
+    Rotated tokens are set securely via HTTP-only cookies.
+
+    Attributes:
+        message (str): Status message.
+    """
+
+    message: str = Field("Tokens refreshed successfully.", description="Status message.")
 
 
 class OTPResponse(BaseModel):

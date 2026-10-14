@@ -117,6 +117,12 @@ async def redis_client() -> AsyncGenerator[Any]:
             await client.delete(key)
         async for key in client.scan_iter("result:*"):
             await client.delete(key)
+        async for key in client.scan_iter("refresh_token:*"):
+            await client.delete(key)
+        async for key in client.scan_iter("revoked_token:*"):
+            await client.delete(key)
+        async for key in client.scan_iter("user_refresh_tokens:*"):
+            await client.delete(key)
         await client.delete(settings.REDIS_QUEUE_NAME)
     finally:
         # Disconnect pool so next test can safely create connections in its own event loop

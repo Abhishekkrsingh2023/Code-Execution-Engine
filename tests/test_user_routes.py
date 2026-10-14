@@ -1,4 +1,4 @@
-"""Tests for user management and authentication routes.
+"""Tests for user authentication and public profile routes.
 
 This module validates:
 - POST /api-v1/users/register:
@@ -20,22 +20,11 @@ This module validates:
     - Rejection of incorrect OTP (400)
     - Rejection of expired OTP and cleanup (400)
     - Rejection when no OTP is pending (400)
-- GET /api-v1/users/:
-    - Paginated listing with limit and offset (200)
-    - Role-based filtering (user, admin, moderator) (200)
-- GET /api-v1/users/{user_id} and /username/{username}:
-    - Fetching user profiles by UUID primary key (200, 404, 422)
-    - Fetching user profiles by unique username handle (200, 404)
-- GET /api-v1/users/check-username:
-    - Username availability evaluation via path and query string
+- GET /api-v1/users/username/{username}:
+    - Fetching public user profile by unique username handle (200, 404)
+- GET /api-v1/users/check-username/{username}:
+    - Username availability evaluation
     - Case-insensitive uniqueness check and formatting validation
-- PATCH /api-v1/users/{user_id}:
-    - Updating username, email, password, role, and verification status (200)
-    - Collision prevention on modified username or email (409)
-    - Safe handling when keeping same username (200)
-- DELETE /api-v1/users/{user_id}:
-    - Deleting an existing user account (200)
-    - Attempting to delete a non-existent user account (404)
 """
 
 import uuid
@@ -48,7 +37,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User, UserRole
+from app.config import settings
+from app.models.user import User
 
 
 class TestUserRegister:
@@ -224,6 +214,10 @@ class TestUserLogin:
         assert data["message"] == "Login successful."
         assert data["auth_method"] == "password"
         assert data["user"]["username"] == "clark_kent"
+        assert "access_token" not in data
+        assert "refresh_token" not in data
+        assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
+        assert settings.REFRESH_TOKEN_COOKIE_NAME in response.cookies
 
     async def test_login_with_valid_email_and_password(
         self,
@@ -428,6 +422,10 @@ class TestUserOTP:
         data = response.json()
         assert data["auth_method"] == "otp"
         assert data["user"]["is_email_verified"] is True
+        assert "access_token" not in data
+        assert "refresh_token" not in data
+        assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
+        assert settings.REFRESH_TOKEN_COOKIE_NAME in response.cookies
 
         # Verify database state
         await db_session.refresh(user)
@@ -541,87 +539,8 @@ class TestUserOTP:
         assert response.status_code == 404
 
 
-class TestUserRetrievalAndListing:
-    """Test suite for GET /api-v1/users/, /api-v1/users/{id}, and /api-v1/users/username/{username}."""
-
-    async def test_list_users_pagination(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: 5 users created in the database.
-        Act: GET /api-v1/users/?skip=1&limit=2.
-        Assert:
-        - 200 OK with total=5, skip=1, limit=2.
-        - users list contains exactly 2 users.
-        """
-        for i in range(5):
-            await create_user(username=f"user_page_{i}", email=f"page_{i}@example.com")
-
-        response = await async_client.get("/api-v1/users/?skip=1&limit=2")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] == 5
-        assert data["skip"] == 1
-        assert data["limit"] == 2
-        assert len(data["users"]) == 2
-
-    async def test_list_users_filter_by_role(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: 2 regular users and 1 admin user in database.
-        Act: GET /api-v1/users/?role=admin.
-        Assert:
-        - 200 OK with total=1.
-        - All returned users have role='admin'.
-        """
-        await create_user(username="standard_1", email="u1@example.com", role=UserRole.USER)
-        await create_user(username="standard_2", email="u2@example.com", role=UserRole.USER)
-        await create_user(username="site_admin", email="admin@example.com", role=UserRole.ADMIN)
-
-        response = await async_client.get("/api-v1/users/?role=admin")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] == 1
-        assert len(data["users"]) == 1
-        assert data["users"][0]["username"] == "site_admin"
-        assert data["users"][0]["role"] == "admin"
-
-    async def test_get_user_by_id_success(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: Existing user in database.
-        Act: GET /api-v1/users/{user_id}.
-        Assert: 200 OK with user profile details.
-        """
-        user = await create_user(username="target_user", email="target@example.com")
-
-        response = await async_client.get(f"/api-v1/users/{user.id}")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == str(user.id)
-        assert data["username"] == "target_user"
-
-    async def test_get_user_by_id_not_found(
-        self,
-        async_client: AsyncClient,
-    ) -> None:
-        """Arrange: Random non-existent UUID.
-        Act: GET /api-v1/users/{random_uuid}.
-        Assert: 404 Not Found.
-        """
-        non_existent_id = uuid.uuid4()
-        response = await async_client.get(f"/api-v1/users/{non_existent_id}")
-
-        assert response.status_code == 404
-        assert f"User with ID '{non_existent_id}' not found." in response.json()["detail"]
+class TestUserRetrieval:
+    """Test suite for GET /api-v1/users/username/{username}."""
 
     async def test_get_user_by_username_success(
         self,
@@ -656,7 +575,7 @@ class TestUserRetrievalAndListing:
 
 
 class TestUsernameAvailability:
-    """Test suite for GET /api-v1/users/check-username/{username} and query parameter variant."""
+    """Test suite for GET /api-v1/users/check-username/{username}."""
 
     async def test_check_username_available(
         self,
@@ -705,207 +624,3 @@ class TestUsernameAvailability:
         assert response.status_code == 200
         data = response.json()
         assert data["is_available"] is False
-
-    async def test_check_username_via_query_parameter(
-        self,
-        async_client: AsyncClient,
-    ) -> None:
-        """Arrange: Desired username passed via query parameter.
-        Act: GET /api-v1/users/check-username?username=cool_dev.
-        Assert: 200 OK with evaluated availability flags.
-        """
-        response = await async_client.get("/api-v1/users/check-username?username=cool_dev")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["username"] == "cool_dev"
-        assert data["is_available"] is True
-
-
-class TestUserUpdate:
-    """Test suite for PATCH /api-v1/users/{user_id}."""
-
-    async def test_update_user_fields_success(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: Existing user in database.
-        Act: PATCH /api-v1/users/{user_id} with new username, email, and role.
-        Assert: 200 OK returning updated user profile.
-        """
-        user = await create_user(
-            username="old_username",
-            email="old_email@example.com",
-            role=UserRole.USER,
-        )
-
-        payload = {
-            "username": "new_username",
-            "email": "new_email@example.com",
-            "role": "moderator",
-        }
-
-        response = await async_client.patch(f"/api-v1/users/{user.id}", json=payload)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["username"] == "new_username"
-        assert data["email"] == "new_email@example.com"
-        assert data["role"] == "moderator"
-
-    async def test_update_user_password_and_verify_new_login(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: Existing user with verified email and initial password.
-        Act:
-        1. PATCH /api-v1/users/{user_id} with new password.
-        2. POST /api-v1/users/login with new password.
-        Assert:
-        - PATCH returns 200 OK.
-        - Login with new password succeeds (200 OK).
-        - Login with old password fails (401 Unauthorized).
-        """
-        user = await create_user(
-            username="change_pwd_user",
-            email="pwd@example.com",
-            password="OldPassword123!",
-            is_email_verified=True,
-        )
-
-        patch_response = await async_client.patch(
-            f"/api-v1/users/{user.id}",
-            json={"password": "NewPassword456!"},
-        )
-        assert patch_response.status_code == 200
-
-        # Login with old password should fail
-        fail_login = await async_client.post(
-            "/api-v1/users/login",
-            json={"username_or_email": "change_pwd_user", "password": "OldPassword123!"},
-        )
-        assert fail_login.status_code == 401
-
-        # Login with new password should succeed
-        success_login = await async_client.post(
-            "/api-v1/users/login",
-            json={"username_or_email": "change_pwd_user", "password": "NewPassword456!"},
-        )
-        assert success_login.status_code == 200
-
-    async def test_update_user_username_collision_returns_409(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: Two distinct users in database.
-        Act: PATCH user1 to have user2's username.
-        Assert: 409 Conflict.
-        """
-        user1 = await create_user(username="user_one", email="one@example.com")
-        await create_user(username="user_two", email="two@example.com")
-
-        response = await async_client.patch(
-            f"/api-v1/users/{user1.id}",
-            json={"username": "user_two"},
-        )
-
-        assert response.status_code == 409
-        assert "Username 'user_two' is already taken." in response.json()["detail"]
-
-    async def test_update_user_email_collision_returns_409(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: Two distinct users in database.
-        Act: PATCH user1 to have user2's email.
-        Assert: 409 Conflict.
-        """
-        user1 = await create_user(username="user_alpha", email="alpha@example.com")
-        await create_user(username="user_beta", email="beta@example.com")
-
-        response = await async_client.patch(
-            f"/api-v1/users/{user1.id}",
-            json={"email": "beta@example.com"},
-        )
-
-        assert response.status_code == 409
-        assert "Email 'beta@example.com' is already registered." in response.json()["detail"]
-
-    async def test_update_user_same_username_no_collision(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: Existing user in database.
-        Act: PATCH user with their existing username unchanged.
-        Assert: 200 OK without triggering conflict check.
-        """
-        user = await create_user(username="unchanged_user", email="unchanged@example.com")
-
-        response = await async_client.patch(
-            f"/api-v1/users/{user.id}",
-            json={"username": "unchanged_user"},
-        )
-
-        assert response.status_code == 200
-        assert response.json()["username"] == "unchanged_user"
-
-    async def test_update_user_not_found(
-        self,
-        async_client: AsyncClient,
-    ) -> None:
-        """Arrange: Non-existent user UUID.
-        Act: PATCH /api-v1/users/{random_uuid}.
-        Assert: 404 Not Found.
-        """
-        non_existent_id = uuid.uuid4()
-        response = await async_client.patch(
-            f"/api-v1/users/{non_existent_id}",
-            json={"username": "new_handle"},
-        )
-
-        assert response.status_code == 404
-
-
-class TestUserDeletion:
-    """Test suite for DELETE /api-v1/users/{user_id}."""
-
-    async def test_delete_user_success(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-        db_session: AsyncSession,
-    ) -> None:
-        """Arrange: Existing user in database.
-        Act: DELETE /api-v1/users/{user_id}.
-        Assert:
-        - 200 OK with success message.
-        - User is removed from database.
-        """
-        user = await create_user(username="delete_me", email="delete_me@example.com")
-
-        response = await async_client.delete(f"/api-v1/users/{user.id}")
-
-        assert response.status_code == 200
-        assert "was successfully deleted" in response.json()["message"]
-
-        # Verify removal from database
-        check = await db_session.execute(select(User).where(User.id == user.id))
-        assert check.scalar_one_or_none() is None
-
-    async def test_delete_user_not_found(
-        self,
-        async_client: AsyncClient,
-    ) -> None:
-        """Arrange: Non-existent user UUID.
-        Act: DELETE /api-v1/users/{random_uuid}.
-        Assert: 404 Not Found.
-        """
-        non_existent_id = uuid.uuid4()
-        response = await async_client.delete(f"/api-v1/users/{non_existent_id}")
-
-        assert response.status_code == 404
