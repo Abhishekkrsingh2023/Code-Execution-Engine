@@ -17,7 +17,6 @@ from app.schemas.problem import (
     ProblemListResponse,
     ProblemResponse,
     ProblemStatusUpdateRequest,
-    ProblemTemplateItem,
     ProblemTemplateResponse,
     ProblemUpdateRequest,
     TestCaseResponse,

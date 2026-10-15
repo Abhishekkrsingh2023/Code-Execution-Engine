@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api-v1/code", tags=["code"])
 
 @router.post("/submit-code")
 async def submit_code_request(submission: SubmissionRequest) -> dict[str, Any]:
-    """_summary_
+    """Submit code for execution.
     This endpoint allows clients to submit code for execution. It handles the submission and returns a response with the submission status and streaming URL.
     Args:
         submission (SubmissionRequest): A request object containing the submission details.
@@ -29,7 +29,7 @@ async def submit_code_request(submission: SubmissionRequest) -> dict[str, Any]:
 
 @router.get("/stream/{submission_id}")
 async def stream_submission(submission_id: uuid.UUID) -> StreamingResponse:
-    """_summary_
+    """Stream code submission results.
     This endpoint allows clients to stream the results of a code submission by its unique identifier. It retrieves the submission data from Redis and returns a streaming response to the client.
     Args:
         submission_id (uuid.UUID): Unique identifier for the submission.
@@ -42,7 +42,7 @@ async def stream_submission(submission_id: uuid.UUID) -> StreamingResponse:
 
 @router.get("/submission/poll/{submission_id}")
 async def poll_submission(submission_id: str) -> dict[str, Any]:
-    """_summary_
+    """Poll code submission status.
     This endpoint allows clients to poll the status of a code submission by its unique identifier. It retrieves the submission data from Redis and returns it to the client.
 
     Args:
