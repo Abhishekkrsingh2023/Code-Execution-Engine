@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,17 +46,21 @@ class Submission(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         index=True,
-        nullable=False,
+        nullable=True,
     )
-    problem_id: Mapped[int] = mapped_column(
+    problem_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("problems.id", ondelete="CASCADE"),
         index=True,
-        nullable=False,
+        nullable=True,
+    )
+    problem_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
     language: Mapped[SubmissionLanguage] = mapped_column(
         SAEnum(
@@ -73,6 +77,30 @@ class Submission(Base):
         default=SubmissionStatus.PENDING,
         index=True,
         nullable=False,
+    )
+    score: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False,
+        comment="Total score earned on this submission based on passed tests",
+    )
+    max_score: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False,
+        comment="Maximum possible score for this submission",
+    )
+    tests_passed: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Number of test cases passed",
+    )
+    total_tests: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Total number of test cases evaluated",
     )
     execution_time: Mapped[float | None] = mapped_column(
         Float,

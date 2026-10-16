@@ -166,8 +166,12 @@ class TestCaseResponse(BaseModel):
 class ProblemTemplateItem(BaseModel):
     """Schema for a language problem template item."""
 
-    language: str = Field(..., max_length=20, description="Programming language (e.g. python, cpp).")
-    boilerplate_code: str | None = Field(default=None, description="Starter boilerplate code for user, if any.")
+    language: str = Field(
+        ..., max_length=20, description="Programming language (e.g. python, cpp)."
+    )
+    boilerplate_code: str | None = Field(
+        default=None, description="Starter boilerplate code for user, if any."
+    )
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -187,14 +191,20 @@ class ProblemTemplateResponse(BaseModel):
 class CommonProblemTemplateCreateRequest(BaseModel):
     """Schema for creating or updating a common problem template."""
 
-    problem_id: str = Field(..., min_length=1, max_length=4, description="4-character problem identifier.")
-    problem_statement: str = Field(..., min_length=5, description="Problem statement text or markdown.")
+    problem_id: str = Field(
+        ..., min_length=1, max_length=4, description="4-character problem identifier."
+    )
+    problem_statement: str = Field(
+        ..., min_length=5, description="Problem statement text or markdown."
+    )
     time_limit: float = Field(default=2.0, ge=0.1, le=30.0, description="Time limit in seconds.")
     run_test_cases: list[dict] = Field(
-        default_factory=list, description="List of run/sample test cases [{input, expected_output}]."
+        default_factory=list,
+        description="List of run/sample test cases [{input, expected_output}].",
     )
     submit_test_cases: list[dict] = Field(
-        default_factory=list, description="List of hidden/submit test cases [{input, expected_output}]."
+        default_factory=list,
+        description="List of hidden/submit test cases [{input, expected_output}].",
     )
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -230,7 +240,9 @@ class FullProblemCreateRequest(BaseModel):
     topic: str = Field(default="General", max_length=100, description="Topic tag.")
     time_limit: float = Field(default=2.0, ge=0.1, le=30.0, description="Time limit in seconds.")
     memory_limit: int = Field(default=256, ge=16, le=2048, description="Memory limit in MB.")
-    status: ProblemStatus = Field(default=ProblemStatus.PUBLISHED, description="Publication status.")
+    status: ProblemStatus = Field(
+        default=ProblemStatus.PUBLISHED, description="Publication status."
+    )
 
     # 4-character ID for common_problem_templates (optional, auto-generated if omitted)
     problem_code: str | None = Field(

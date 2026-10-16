@@ -24,6 +24,10 @@ class AdminUserResponse(BaseModel):
     is_protected: bool = Field(..., description="Whether account is a protected system account.")
     has_password: bool = Field(..., description="Whether account has a password set.")
     created_at: datetime = Field(..., description="Registration timestamp.")
+    total_score: float = Field(
+        default=0.0, description="Total score accumulated on the leaderboard."
+    )
+    problems_solved: int = Field(default=0, description="Total distinct problems solved.")
     submissions_count: int = Field(default=0, description="Total submissions submitted by user.")
     problems_created_count: int = Field(
         default=0, description="Total problems authored by user (for moderators/admins)."

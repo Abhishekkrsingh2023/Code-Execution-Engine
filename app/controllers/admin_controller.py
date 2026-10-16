@@ -94,6 +94,8 @@ async def handle_list_admin_users(
                 is_protected=u.is_protected,
                 has_password=u.has_password,
                 created_at=u.created_at,
+                total_score=getattr(u, "total_score", 0.0) or 0.0,
+                problems_solved=getattr(u, "problems_solved", 0) or 0,
                 submissions_count=sub_count,
                 problems_created_count=prob_count,
             )

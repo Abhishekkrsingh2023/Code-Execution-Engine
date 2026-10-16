@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -78,6 +78,17 @@ class User(Base):
     is_protected: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
+        nullable=False,
+    )
+    total_score: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False,
+        index=True,
+    )
+    problems_solved: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(

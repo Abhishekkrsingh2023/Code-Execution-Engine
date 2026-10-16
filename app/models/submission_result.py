@@ -48,6 +48,18 @@ class SubmissionResult(Base):
         default=JudgeStatus.PASSED,
         nullable=False,
     )
+    score: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False,
+        comment="Score earned for this testcase",
+    )
+    max_score: Mapped[float] = mapped_column(
+        Float,
+        default=1.0,
+        nullable=False,
+        comment="Max score weight for this testcase",
+    )
     execution_time: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,

@@ -130,3 +130,21 @@ async def require_moderator_or_admin(
             detail="Moderator or Admin access required for this resource.",
         )
     return current_user
+
+
+async def get_current_user_optional(
+    request: Request,
+    authorization: str | None = Header(None, description="Bearer token or user ID"),
+    x_user_id: str | None = Header(None, alias="X-User-Id", description="User UUID primary key"),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Dependency that extracts current user if authenticated, or None if anonymous/unauthenticated."""
+    try:
+        return await get_current_user(
+            request=request,
+            authorization=authorization,
+            x_user_id=x_user_id,
+            db=db,
+        )
+    except HTTPException:
+        return None

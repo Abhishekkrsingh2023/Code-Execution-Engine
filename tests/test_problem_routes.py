@@ -312,7 +312,10 @@ class TestPublicProblemListingAndFiltering:
         assert len(data["run_test_cases"]) == 2
         assert len(data["submit_test_cases"]) == 2
         assert len(data["templates"]) == 2
-        assert data["templates"][0]["boilerplate_code"] == "class Solution:\n    def isPalindrome(self, s: str) -> bool:\n        pass"
+        assert (
+            data["templates"][0]["boilerplate_code"]
+            == "class Solution:\n    def isPalindrome(self, s: str) -> bool:\n        pass"
+        )
         assert data["test_cases_count"] == 4
 
         # Test GET /api-v1/problems/{id}/full

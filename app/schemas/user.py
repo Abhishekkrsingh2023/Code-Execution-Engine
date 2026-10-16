@@ -200,6 +200,12 @@ class UserResponse(BaseModel):
         default=False, description="Indicates whether the account is a protected system account."
     )
     has_password: bool = Field(..., description="Indicates whether the account has a password set.")
+    total_score: float = Field(
+        default=0.0, description="Total score accumulated on the leaderboard."
+    )
+    problems_solved: int = Field(
+        default=0, description="Total distinct problems successfully solved."
+    )
     created_at: datetime = Field(..., description="Account creation timestamp in UTC.")
 
     model_config = ConfigDict(

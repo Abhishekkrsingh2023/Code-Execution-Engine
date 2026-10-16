@@ -1,34 +1,47 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.code_controller import (
     handle_poll_submission,
     handle_stream_submission,
     handle_submit_code_request,
 )
+from app.database import get_db
+from app.dependencies import get_current_user_optional
+from app.models.user import User
 from app.schemas.submission import SubmissionRequest
 
 router = APIRouter(prefix="/api-v1/code", tags=["code"])
 
 
 @router.post("/submit-code")
-async def submit_code_request(submission: SubmissionRequest) -> dict[str, Any]:
+async def submit_code_request(
+    submission: SubmissionRequest,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
     """Submit code for execution.
     This endpoint allows clients to submit code for execution. It handles the submission and returns a response with the submission status and streaming URL.
     Args:
         submission (SubmissionRequest): A request object containing the submission details.
+        current_user (User | None): Authenticated user making the submission (optional).
+        db (AsyncSession): Database session.
 
     Returns:
         dict: A dictionary containing the submission status and streaming URL.
     """
-    return await handle_submit_code_request(submission)
+    return await handle_submit_code_request(submission, current_user=current_user, db=db)
 
 
 @router.get("/stream/{submission_id}")
-async def stream_submission(submission_id: uuid.UUID) -> StreamingResponse:
+async def stream_submission(
+    submission_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
     """Stream code submission results.
     This endpoint allows clients to stream the results of a code submission by its unique identifier. It retrieves the submission data from Redis and returns a streaming response to the client.
     Args:
@@ -41,7 +54,10 @@ async def stream_submission(submission_id: uuid.UUID) -> StreamingResponse:
 
 
 @router.get("/submission/poll/{submission_id}")
-async def poll_submission(submission_id: str) -> dict[str, Any]:
+async def poll_submission(
+    submission_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
     """Poll code submission status.
     This endpoint allows clients to poll the status of a code submission by its unique identifier. It retrieves the submission data from Redis and returns it to the client.
 
@@ -53,4 +69,4 @@ async def poll_submission(submission_id: str) -> dict[str, Any]:
     Raises:
         HTTPException: If the submission is not found in Redis, a 404 error is raised
     """
-    return await handle_poll_submission(submission_id)
+    return await handle_poll_submission(submission_id, db=db)

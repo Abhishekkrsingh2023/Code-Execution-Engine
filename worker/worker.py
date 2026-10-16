@@ -1,13 +1,23 @@
-# import json
+import asyncio
 import logging
 import pathlib
 import shutil
+import sys
 import time
 from enum import Enum
 
 import orjson  # faster JSON serialization/deserialization than the built-in json module
 import redis
+
+# pyrefly: ignore[missing-import]
 from container import DockerContainerEngine
+
+# Ensure app package is importable
+PATH = pathlib.Path(__file__).parent.parent.resolve()
+if str(PATH) not in sys.path:
+    sys.path.insert(0, str(PATH))
+
+from app.services.leaderboard_service import record_submission_completion  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,21 +85,25 @@ def extract_submission_data(job: str) -> dict:
     """
     Parse the JSON job string from the Redis queue.
 
-    Returns a dict with: submission_id, test_cases, time_limit, language.
+    Returns a dict with: submission_id, test_cases, time_limit, language, user_id, problem_id, problem_name.
     """
     job_data = orjson.loads(job)
     return {
         "submission_id": job_data.get("submission_id"),
         "language": job_data.get("language"),
-        "test_cases": job_data.get("test_cases"),
+        "test_cases": job_data.get("test_cases", []),
         "time_limit": job_data.get("time_limit", 2.0),
+        "user_id": job_data.get("user_id"),
+        "problem_id": job_data.get("problem_id"),
+        "problem_name": job_data.get("problem_name"),
+        "user_code": job_data.get("user_code", ""),
     }
 
 
 def compile_and_run_code(submission_data: dict) -> dict:
     """
     Spin up a Docker container, compile (if needed), run each test case,
-    then destroy the container.
+    calculate score based on passed tests, then destroy the container.
 
     Container teardown is guaranteed via ``try/finally`` even when compilation
     fails — previously, a compile failure left zombie containers running.
@@ -98,8 +112,9 @@ def compile_and_run_code(submission_data: dict) -> dict:
     """
     submission_id = submission_data["submission_id"]
     language = submission_data["language"]
-    test_cases = submission_data["test_cases"]
+    test_cases = submission_data.get("test_cases") or []
     time_limit = float(submission_data.get("time_limit") or 2.0)
+    max_score = round(sum(float(tc.get("weight", 1.0) or 1.0) for tc in test_cases), 2)
 
     # Add a small grace period on top of the declared limit so Docker exec
     # overhead doesn't count against the user's allotted time.
@@ -128,16 +143,23 @@ def compile_and_run_code(submission_data: dict) -> dict:
                 "error": compile_result["stderr"],
                 "results": orjson.dumps([]),
                 "time_taken": 0.0,
+                "score": 0.0,
+                "max_score": max_score,
+                "tests_passed": 0,
+                "total_tests": len(test_cases),
             }
 
         # ── Execute each test case ───────────────────────────────────────
         start_time = time.perf_counter()
         results = []
         overall_status = JobStatus.COMPLETED
+        score = 0.0
+        tests_passed = 0
 
         for test_case in test_cases:
             input_data = test_case.get("input", "")
             expected_output = test_case.get("expected_output", "")
+            weight = float(test_case.get("weight", 1.0) or 1.0)
 
             execution_result = container.execute_code(
                 language,
@@ -153,6 +175,8 @@ def compile_and_run_code(submission_data: dict) -> dict:
                         "status": "tle",
                         "output": "",
                         "error": "Time Limit Exceeded",
+                        "weight": weight,
+                        "score": 0.0,
                     }
                 )
                 overall_status = JobStatus.TLE
@@ -160,11 +184,15 @@ def compile_and_run_code(submission_data: dict) -> dict:
                 execution_result["returncode"] == 0
                 and execution_result["stdout"].strip() == expected_output.strip()
             ):
+                score += weight
+                tests_passed += 1
                 results.append(
                     {
                         "status": "passed",
                         "output": execution_result["stdout"],
                         "error": "",
+                        "weight": weight,
+                        "score": weight,
                     }
                 )
             else:
@@ -173,8 +201,12 @@ def compile_and_run_code(submission_data: dict) -> dict:
                         "status": "failed",
                         "output": execution_result["stdout"],
                         "error": execution_result["stderr"],
+                        "weight": weight,
+                        "score": 0.0,
                     }
                 )
+                if overall_status != JobStatus.TLE:
+                    overall_status = JobStatus.FAILED
 
         total_time = time.perf_counter() - start_time
 
@@ -184,6 +216,10 @@ def compile_and_run_code(submission_data: dict) -> dict:
             "error": "",
             "results": orjson.dumps(results),
             "time_taken": round(total_time, 4),
+            "score": round(score, 2),
+            "max_score": max_score,
+            "tests_passed": tests_passed,
+            "total_tests": len(test_cases),
         }
 
     finally:
@@ -235,6 +271,10 @@ def process_jobs(client: redis.Redis) -> None:
                 "error": str(e),
                 "results": orjson.dumps([]),  # ← always present so callers don't get KeyError
                 "time_taken": 0.0,
+                "score": 0.0,
+                "max_score": 0.0,
+                "tests_passed": 0,
+                "total_tests": len(data.get("test_cases", [])),
             }
 
         # Persist results back to Redis
@@ -252,6 +292,17 @@ def process_jobs(client: redis.Redis) -> None:
         client.set(f"result:{submission_id}", payload, ex=3600)  # durable copy, 1h TTL
         client.publish(f"result:{submission_id}", payload)  # live notification
 
+        # Synchronize score and submission record to PostgreSQL & update user leaderboard
+        try:
+            full_data = {**data, **results}
+            asyncio.run(record_submission_completion(submission_id, full_data))
+            log.info(
+                "Persisted submission %s to PostgreSQL and updated user leaderboard score",
+                submission_id,
+            )
+        except Exception as exc:
+            log.warning("Could not sync submission %s to database: %s", submission_id, exc)
+
         # Clean up the submission's source directory from disk
         submission_dir = CODE_BASE / submission_id
         try:
@@ -261,7 +312,13 @@ def process_jobs(client: redis.Redis) -> None:
         except Exception as e:
             log.error("Cleanup failed for %s: %s", submission_id, e)
 
-        log.info("Finished submission %s — status=%s", submission_id, results["status"])
+        log.info(
+            "Finished submission %s — status=%s, score=%s/%s",
+            submission_id,
+            results["status"],
+            results.get("score"),
+            results.get("max_score"),
+        )
 
 
 def main() -> None:

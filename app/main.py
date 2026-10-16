@@ -8,6 +8,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.routers import (
     admin_routes,
     code_routes,
+    leaderboard_routes,
     problem_routes,
     root_routes,
     user_routes,
@@ -57,3 +58,4 @@ app.include_router(root_routes.router)
 app.include_router(user_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(problem_routes.router)
+app.include_router(leaderboard_routes.router)

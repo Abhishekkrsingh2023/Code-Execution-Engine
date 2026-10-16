@@ -16,8 +16,12 @@ def get_uuid() -> str:
 
 
 class TestCase(BaseModel):
+    id: str | None = Field(default=None, description="Optional test case identifier.")
     input: str = Field(..., description="Input provided to the user's program.")
     expected_output: str = Field(..., description="Expected output for the given input.")
+    weight: float = Field(
+        default=1.0, ge=0.0, description="Weight/score assigned to this test case."
+    )
 
 
 class SubmissionRequest(BaseModel):
@@ -32,6 +36,7 @@ class SubmissionRequest(BaseModel):
         language (Language): Programming language of the submission.
         test_cases (List[TestCase]): List of test cases against which the code will be executed
         time_limit (float): Maximum execution time in seconds, default is 2.0 seconds.
+        user_id (str | None): Optional user identifier submitting the code.
     """
 
     problem_id: str = Field(..., description="Unique identifier of the programming problem.")
@@ -45,6 +50,9 @@ class SubmissionRequest(BaseModel):
         ..., min_length=1, description="List of test cases against which the code will be executed."
     )
     time_limit: float = Field(default=2.0, gt=0, description="Maximum execution time in seconds.")
+    user_id: str | None = Field(
+        default=None, description="Optional user ID associated with the submission."
+    )
 
     model_config = ConfigDict(
         use_enum_values=True,

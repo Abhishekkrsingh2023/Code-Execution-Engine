@@ -702,4 +702,3 @@ async def handle_get_problem_test_cases(
     stmt = select(TestCase).where(TestCase.problem_id == problem_id).order_by(TestCase.id)
     cases = (await db.execute(stmt)).scalars().all()
     return [TestCaseResponse.model_validate(c) for c in cases]
-
