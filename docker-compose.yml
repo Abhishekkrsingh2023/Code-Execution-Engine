@@ -16,7 +16,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    # adding memory and cpu limits
     deploy:
       resources:
         limits:
@@ -36,8 +35,11 @@ services:
       - redis_data:/data
     command: >
       redis-server --appendonly yes
-
-    # adding memory and cpu limits
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
@@ -47,6 +49,35 @@ services:
           cpus: "0.5"
           memory: "256M"
 
+  # worker:
+  #   build:
+  #     context: ./worker
+  #     dockerfile: Dockerfile
+  #   container_name: code_executor_worker
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   environment:
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #     DATABASE_URL: postgresql+psycopg://postgres:password@postgres:5432/code_buddy
+  #     CODE_BASE_DIR: /code
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - code_data:/code
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "1"
+  #         memory: "2G"
+  #       reservations:
+  #         cpus: "0.5"
+  #         memory: "512M"
+
 volumes:
   postgres_data:
   redis_data:
+  # code_data:

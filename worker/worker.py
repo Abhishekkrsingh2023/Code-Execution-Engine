@@ -1,4 +1,3 @@
-import asyncio
 import pathlib
 import shutil
 import sys
@@ -8,25 +7,53 @@ from enum import Enum
 import orjson  # faster JSON serialization/deserialization than the built-in json module
 import redis
 
-# pyrefly: ignore[missing-import]
-from container import DockerContainerEngine
-
-# Ensure app package is importable
-PATH = pathlib.Path(__file__).parent.parent.resolve()
-if str(PATH) not in sys.path:
-    sys.path.insert(0, str(PATH))
+# Ensure worker package and directory are importable regardless of invocation directory
+_CURRENT_DIR = pathlib.Path(__file__).parent.resolve()
+_PARENT_DIR = _CURRENT_DIR.parent.resolve()
+for _p in (_PARENT_DIR, _CURRENT_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 try:
+    from worker.config import settings
+    from worker.container import DockerContainerEngine
+    from worker.database import engine
     from worker.logs.logger import logger as log
     from worker.logs.logger import setup_logging
+    from worker.services import record_submission_completion
 except ImportError:
+    # pyrefly: ignore[missing-import]
+    # pyrefly: ignore[missing-import]
+    from config import settings
+
+    # pyrefly: ignore[missing-import]
+    from container import DockerContainerEngine
+
+    # pyrefly: ignore[missing-import]
+    from database import engine
+
+    # pyrefly: ignore[missing-import]
     from logs.logger import logger as log
+
+    # pyrefly: ignore[missing-import]
     from logs.logger import setup_logging
 
-setup_logging()
+    # pyrefly: ignore[missing-import]
+    from services import record_submission_completion
 
-from app.config import settings  # noqa: E402
-from app.services.leaderboard_service import record_submission_completion  # noqa: E402
+if settings.LOG_FILE_PATH:
+    setup_logging(
+        log_file=settings.LOG_FILE_PATH,
+        rotation=settings.LOG_ROTATION,
+        retention=settings.LOG_RETENTION,
+        level=settings.LOG_LEVEL,
+    )
+else:
+    setup_logging(
+        rotation=settings.LOG_ROTATION,
+        retention=settings.LOG_RETENTION,
+        level=settings.LOG_LEVEL,
+    )
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -39,43 +66,39 @@ class JobStatus(str, Enum):
     TLE = "tle"  # Time Limit Exceeded
 
 
-QUEUE_NAME = "code:queue"
-SUBMISSION_KEY = "submission:"
+QUEUE_NAME = settings.REDIS_QUEUE_NAME
+SUBMISSION_KEY = settings.REDIS_SUBMISSION_KEY_PREFIX
 
-# docker image for each supported language
-# NOTE: there is no official "java:*" image on Docker Hub — use eclipse-temurin.
-DOCKER_IMAGE = {
-    "python": "python:3.12-alpine",
-    "cpp": "gcc:12.5",
-    "c": "gcc:12.5",
-    "java": "eclipse-temurin:22-jdk-alpine",
-}
+# Docker image for each supported language
+DOCKER_IMAGE = settings.docker_images
 
-# Host-side base directory; the worker appends /{submission_id} when mounting
-CODE_BASE = PATH / "app" / "code"
+# Host-side base directory for code submissions
+CODE_BASE = settings.resolve_code_base(_PARENT_DIR)
 
 # How long to try reconnecting to Redis before giving up (seconds)
-REDIS_RECONNECT_DELAY = 5
+REDIS_RECONNECT_DELAY = settings.REDIS_RECONNECT_DELAY
+
+EXTENSION_MAP = {
+    "python": "py",
+    "cpp": "cpp",
+    "c": "c",
+    "java": "java",
+}
 
 
 # ── Redis factory ────────────────────────────────────────────────────────────
 
 
 def _make_redis_client() -> redis.Redis:
-    """
-    Create a Redis client with sane timeouts and keepalive.
-
-    Uses host/port from app.config.settings so the worker respects the same
-    environment variables as the FastAPI application. Previously this was
-    hardcoded to localhost:6379 which broke Docker Compose / Kubernetes setups.
-    """
+    """Create a synchronous Redis client with sane timeouts and keepalive."""
     return redis.Redis(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
+        password=settings.REDIS_PASSWORD,
         decode_responses=True,
-        socket_timeout=30,  # raise after 30 s of silence
-        socket_connect_timeout=10,  # fail fast on initial connect
-        socket_keepalive=True,  # OS-level TCP keepalive (detects dropped conns)
+        socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+        socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
+        socket_keepalive=True,
     )
 
 
@@ -83,10 +106,10 @@ def _make_redis_client() -> redis.Redis:
 
 
 def extract_submission_data(job: str) -> dict:
-    """
-    Parse the JSON job string from the Redis queue.
+    """Parse the JSON job string from the Redis queue.
 
-    Returns a dict with: submission_id, mode, test_cases, time_limit, language, user_id, problem_id, problem_name.
+    Returns a dict with: submission_id, mode, test_cases, time_limit, language,
+    user_id, problem_id, problem_name, user_code.
     """
     job_data = orjson.loads(job)
     return {
@@ -103,12 +126,12 @@ def extract_submission_data(job: str) -> dict:
 
 
 def compile_and_run_code(submission_data: dict) -> dict:
-    """
-    Spin up a Docker container, compile (if needed), run each test case,
+    """Spin up a Docker container, compile (if needed), run each test case,
+
     calculate score based on passed tests, then destroy the container.
 
     Container teardown is guaranteed via ``try/finally`` even when compilation
-    fails — previously, a compile failure left zombie containers running.
+    fails.
 
     Returns a result dict suitable for direct storage in Redis via hset.
     """
@@ -116,17 +139,27 @@ def compile_and_run_code(submission_data: dict) -> dict:
     language = submission_data["language"]
     test_cases = submission_data.get("test_cases") or []
     time_limit = float(submission_data.get("time_limit") or 2.0)
+    user_code = submission_data.get("user_code", "")
     max_score = round(sum(float(tc.get("weight", 1.0) or 1.0) for tc in test_cases), 2)
 
-    # Add a small grace period on top of the declared limit so Docker exec
-    # overhead doesn't count against the user's allotted time.
+    # Ensure code file exists in submission directory in case worker runs independently
+    submission_dir = CODE_BASE / submission_id
+    submission_dir.mkdir(parents=True, exist_ok=True)
+    ext = EXTENSION_MAP.get(language, "txt")
+    code_file = submission_dir / f"Main.{ext}"
+    if not code_file.exists() and user_code:
+        code_file.write_text(user_code, encoding="utf-8")
+
+    # Add a small grace period on top of declared limit so Docker exec overhead doesn't count against user
     exec_timeout = time_limit + 2.0
 
+    mount_path = settings.HOST_CODE_BASE_DIR or str(CODE_BASE)
     container = DockerContainerEngine(
         image_name=DOCKER_IMAGE[language],
-        memory_limit="128m",
-        cpu_limit="0.5",
-        volume_mount=str(CODE_BASE),
+        memory_limit=settings.CONTAINER_MEMORY_LIMIT,
+        cpu_limit=settings.CONTAINER_CPU_LIMIT,
+        pids_limit=settings.CONTAINER_PIDS_LIMIT,
+        volume_mount=mount_path,
     )
 
     try:
@@ -244,8 +277,7 @@ def compile_and_run_code(submission_data: dict) -> dict:
         }
 
     finally:
-        # Always remove the container — even when compilation fails or an
-        # unhandled exception propagates. Prevents zombie container leaks.
+        # Always remove container — prevents zombie container leaks
         try:
             container.remove_container()
         except Exception as e:
@@ -255,24 +287,11 @@ def compile_and_run_code(submission_data: dict) -> dict:
 # ── Main processing loop ─────────────────────────────────────────────────────
 
 
-def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
-    """
-    Inner loop: dequeue jobs and process them until a Redis error occurs.
-    Separated from ``main()`` so the reconnect wrapper in ``main()`` can
-    cleanly restart it without restarting the whole process.
-
-    ``loop`` is the single persistent event loop for the entire process lifetime.
-    We call ``loop.run_until_complete()`` instead of ``asyncio.run()`` so that
-    SQLAlchemy's async engine — which captures the running loop on first use —
-    is always bound to the same loop.  ``asyncio.run()`` creates a *new* loop for
-    every call and tears it down immediately afterwards, which causes
-    ``RuntimeError: Task attached to a different loop`` on the second submission.
-    """
+def process_jobs(client: redis.Redis) -> None:
+    """Inner loop: dequeue jobs synchronously and process them until a Redis error occurs."""
     log.info("Worker ready — waiting for jobs on '{}'", QUEUE_NAME)
 
     while True:
-        # brpop with timeout=30 so the loop wakes up periodically and can
-        # detect a stale connection sooner than socket_timeout alone.
         result = client.brpop(QUEUE_NAME, timeout=30)
         if result is None:
             # Timeout — no jobs yet; loop to issue another brpop
@@ -300,7 +319,7 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
                 "status": JobStatus.FAILED.value,
                 "output": "",
                 "error": str(e),
-                "results": orjson.dumps([]),  # ← always present so callers don't get KeyError
+                "results": orjson.dumps([]),
                 "time_taken": 0.0,
                 "score": 0.0,
                 "max_score": 0.0,
@@ -313,7 +332,7 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
         if mode == "submit":
             client.hdel(submission_key, "test_cases")
 
-        # Build payload matching the polling endpoint's response shape
+        # Build payload matching polling endpoint's response shape
         result_dict = client.hgetall(submission_key)
         if not result_dict:
             result_dict = {
@@ -333,7 +352,7 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
         if mode == "submit":
             try:
                 full_data = {**data, **results}
-                loop.run_until_complete(record_submission_completion(submission_id, full_data))
+                record_submission_completion(submission_id, full_data)
                 log.info(
                     "Persisted submission {} to PostgreSQL and updated user leaderboard score",
                     submission_id,
@@ -364,24 +383,16 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
 
 
 def main() -> None:
-    """
-    Outer loop: connect to Redis and start processing jobs.
-    Reconnects automatically if the connection is lost.
+    """Outer loop: connect to Redis and start processing jobs synchronously.
 
-    A single asyncio event loop is created here and reused for the entire
-    process lifetime.  This is intentional: SQLAlchemy's async engine binds
-    itself to the first event loop it encounters; reusing the same one avoids
-    cross-loop ``RuntimeError``s that would occur if we called ``asyncio.run()``
-    (which creates and immediately destroys a new loop) for every submission.
+    Reconnects automatically if the connection is lost.
     """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
         while True:
             try:
                 client = _make_redis_client()
                 client.ping()  # fail fast if Redis is not reachable at startup
-                process_jobs(client, loop)
+                process_jobs(client)
             except redis.ConnectionError as e:
                 log.error(
                     "Redis connection lost: {} — reconnecting in {}s…", e, REDIS_RECONNECT_DELAY
@@ -394,11 +405,10 @@ def main() -> None:
                 log.info("Worker shutting down.")
                 break
     finally:
-        # Cleanly drain pending callbacks and close the loop on exit
         try:
-            loop.run_until_complete(loop.shutdown_asyncgens())
-        finally:
-            loop.close()
+            engine.dispose()
+        except Exception as e:
+            log.error("Error disposing database engine: {}", e)
 
 
 if __name__ == "__main__":

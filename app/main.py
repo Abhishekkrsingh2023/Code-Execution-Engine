@@ -2,13 +2,6 @@ import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-# Suppress harmless CPython 3.13 resource_tracker warning on reloader SIGTERM shutdown
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    module="multiprocessing.resource_tracker",
-)
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -23,6 +16,13 @@ from app.routers import (
     user_routes,
 )
 from app.utils.audit_logger import setup_audit_logger
+
+# Suppress harmless CPython 3.13 resource_tracker warning on reloader SIGTERM shutdown
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="multiprocessing.resource_tracker",
+)
 
 
 @asynccontextmanager
