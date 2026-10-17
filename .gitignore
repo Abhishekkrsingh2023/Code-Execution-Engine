@@ -18,6 +18,6 @@ frontend/.next/
 frontend/out/
 
 # Logs & temp execution dirs
-logs/
+/logs/
 *.log
 app/code/

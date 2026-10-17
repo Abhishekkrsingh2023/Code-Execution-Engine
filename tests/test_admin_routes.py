@@ -47,7 +47,15 @@ from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.models.submission import Submission, SubmissionLanguage, SubmissionStatus
 from app.models.user import User, UserRole, UserStatus
 from app.utils.audit_logger import sanitize_details, setup_audit_logger
+from app.utils.jwt import create_access_token
 from tests.conftest import CreateUserCallable
+
+
+def auth_headers(user: User) -> dict[str, str]:
+    """Helper returning standard Bearer authorization header with a valid JWT access token."""
+    token = create_access_token(user_id=user.id, role=user.role)
+    return {"Authorization": f"Bearer {token}"}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Admin Access Control Tests
@@ -65,7 +73,7 @@ class TestAdminAccessControl:
         """Admin can access protected endpoint with Bearer token."""
         response = await async_client.get(
             "/api-v1/admin/users",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -77,12 +85,12 @@ class TestAdminAccessControl:
         async_client: AsyncClient,
         admin_user: User,
     ) -> None:
-        """Admin can access protected endpoint using fallback X-User-Id header."""
+        """Raw X-User-Id header without valid JWT is rejected with 401 Unauthorized (HIGH-5)."""
         response = await async_client.get(
             "/api-v1/admin/users",
             headers={"X-User-Id": str(admin_user.id)},
         )
-        assert response.status_code == 200
+        assert response.status_code == 401
 
     async def test_unauthenticated_request_rejected(
         self,
@@ -110,9 +118,10 @@ class TestAdminAccessControl:
     ) -> None:
         """Requests with non-existent user UUID return 401."""
         random_id = uuid.uuid4()
+        token = create_access_token(user_id=random_id, role="admin")
         response = await async_client.get(
             "/api-v1/admin/users",
-            headers={"Authorization": f"Bearer {random_id}"},
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 401
 
@@ -124,7 +133,7 @@ class TestAdminAccessControl:
         """Normal users attempting admin operations return 403 Forbidden."""
         response = await async_client.get(
             "/api-v1/admin/users",
-            headers={"Authorization": f"Bearer {normal_user.id}"},
+            headers=auth_headers(normal_user),
         )
         assert response.status_code == 403
         assert "Admin access required" in response.json()["detail"]
@@ -137,7 +146,7 @@ class TestAdminAccessControl:
         """Moderator attempting admin operations returns 403 Forbidden."""
         response = await async_client.get(
             "/api-v1/admin/users",
-            headers={"Authorization": f"Bearer {moderator_user.id}"},
+            headers=auth_headers(moderator_user),
         )
         assert response.status_code == 403
         assert "Admin access required" in response.json()["detail"]
@@ -156,7 +165,7 @@ class TestAdminAccessControl:
         )
         response = await async_client.get(
             "/api-v1/admin/users",
-            headers={"Authorization": f"Bearer {suspended_admin.id}"},
+            headers=auth_headers(suspended_admin),
         )
         assert response.status_code == 403
         assert "suspended" in response.json()["detail"]
@@ -182,7 +191,7 @@ class TestAdminUserManagement:
 
         response = await async_client.get(
             "/api-v1/admin/users?skip=0&limit=3",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -203,7 +212,7 @@ class TestAdminUserManagement:
 
         response = await async_client.get(
             "/api-v1/admin/users?role=moderator",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -222,7 +231,7 @@ class TestAdminUserManagement:
 
         response = await async_client.get(
             "/api-v1/admin/users?status=suspended",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -241,7 +250,7 @@ class TestAdminUserManagement:
 
         response = await async_client.get(
             "/api-v1/admin/users?search=special",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -280,7 +289,7 @@ class TestAdminUserManagement:
 
         response = await async_client.get(
             f"/api-v1/admin/users/{normal_user.id}",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -296,7 +305,7 @@ class TestAdminUserManagement:
         """Non-existent user lookup returns 404."""
         response = await async_client.get(
             f"/api-v1/admin/users/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 404
 
@@ -311,7 +320,7 @@ class TestAdminUserManagement:
         response = await async_client.patch(
             f"/api-v1/admin/users/{normal_user.id}/role",
             json={"role": "moderator"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         assert response.json()["role"] == "moderator"
@@ -337,7 +346,7 @@ class TestAdminUserManagement:
         response = await async_client.patch(
             f"/api-v1/admin/users/{moderator_user.id}/role",
             json={"role": "user"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         assert response.json()["role"] == "user"
@@ -363,7 +372,7 @@ class TestAdminUserManagement:
         res_susp = await async_client.patch(
             f"/api-v1/admin/users/{normal_user.id}/status",
             json={"status": "suspended"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert res_susp.status_code == 200
         assert res_susp.json()["status"] == "suspended"
@@ -372,7 +381,7 @@ class TestAdminUserManagement:
         res_act = await async_client.patch(
             f"/api-v1/admin/users/{normal_user.id}/status",
             json={"status": "active"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert res_act.status_code == 200
         assert res_act.json()["status"] == "active"
@@ -387,7 +396,7 @@ class TestAdminUserManagement:
         response = await async_client.patch(
             f"/api-v1/admin/users/{normal_user.id}",
             json={"username": "renamed_user"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         assert response.json()["username"] == "renamed_user"
@@ -402,7 +411,7 @@ class TestAdminUserManagement:
         """Admin can safely delete user with cascading and audit logging."""
         response = await async_client.delete(
             f"/api-v1/admin/users/{normal_user.id}",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         assert "successfully deleted" in response.json()["message"]
@@ -437,7 +446,7 @@ class TestRoleEscalationAndSelfLockout:
         response = await async_client.patch(
             f"/api-v1/admin/users/{admin_user.id}/role",
             json={"role": "user"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 400
         assert "cannot modify their own role" in response.json()["detail"]
@@ -451,7 +460,7 @@ class TestRoleEscalationAndSelfLockout:
         response = await async_client.patch(
             f"/api-v1/admin/users/{admin_user.id}/status",
             json={"status": "suspended"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 400
         assert "cannot deactivate or suspend their own account" in response.json()["detail"]
@@ -464,7 +473,7 @@ class TestRoleEscalationAndSelfLockout:
         """Administrator cannot delete their own account."""
         response = await async_client.delete(
             f"/api-v1/admin/users/{admin_user.id}",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 400
         assert "cannot delete their own account" in response.json()["detail"]
@@ -485,7 +494,7 @@ class TestRoleEscalationAndSelfLockout:
         response = await async_client.patch(
             f"/api-v1/admin/users/{protected_user.id}/role",
             json={"role": "moderator"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 403
         assert "Protected system accounts" in response.json()["detail"]
@@ -506,7 +515,7 @@ class TestRoleEscalationAndSelfLockout:
         response = await async_client.patch(
             f"/api-v1/admin/users/{protected_user.id}/status",
             json={"status": "suspended"},
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 403
         assert "Protected system accounts" in response.json()["detail"]
@@ -526,7 +535,7 @@ class TestRoleEscalationAndSelfLockout:
         )
         response = await async_client.delete(
             f"/api-v1/admin/users/{protected_user.id}",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 403
         assert "Protected system accounts" in response.json()["detail"]
@@ -559,7 +568,7 @@ class TestSystemStatisticsAndDashboard:
 
         response = await async_client.get(
             "/api-v1/admin/stats/users?days=7",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -610,7 +619,7 @@ class TestSystemStatisticsAndDashboard:
 
         response = await async_client.get(
             "/api-v1/admin/stats/problems",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -685,7 +694,7 @@ class TestSystemStatisticsAndDashboard:
 
         response = await async_client.get(
             "/api-v1/admin/stats/submissions?days=30",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -705,7 +714,7 @@ class TestSystemStatisticsAndDashboard:
         """Consolidated dashboard endpoint returns users, problems, submissions, and activity."""
         response = await async_client.get(
             "/api-v1/admin/stats",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -772,7 +781,7 @@ class TestAuditLoggingAndReliability:
         # Filter by action
         res = await async_client.get(
             "/api-v1/admin/audit-logs?action=user_role_change",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert res.status_code == 200
         data = res.json()
@@ -783,7 +792,7 @@ class TestAuditLoggingAndReliability:
         log_id = data["logs"][0]["id"]
         res_single = await async_client.get(
             f"/api-v1/admin/audit-logs/{log_id}",
-            headers={"Authorization": f"Bearer {admin_user.id}"},
+            headers=auth_headers(admin_user),
         )
         assert res_single.status_code == 200
         assert res_single.json()["id"] == log_id
@@ -814,7 +823,7 @@ class TestAuditLoggingAndReliability:
             response = await async_client.patch(
                 f"/api-v1/admin/users/{normal_user.id}/role",
                 json={"role": "moderator"},
-                headers={"Authorization": f"Bearer {admin_user.id}"},
+                headers=auth_headers(admin_user),
             )
             assert response.status_code == 500
         finally:
@@ -861,6 +870,7 @@ class TestAuditLoggingAndReliability:
         from loguru import logger
 
         logger.bind(audit=True, audit_action="test_action").info("Single audit message")
+        await logger.complete()
 
         # Verify exactly one line was written (no duplication)
         content = log_file.read_text()

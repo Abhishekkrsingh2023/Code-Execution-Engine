@@ -17,6 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.models.user import User
+from app.utils.jwt import create_access_token
+
+
+def auth_headers(user: User) -> dict[str, str]:
+    """Helper returning standard Bearer authorization header with a valid JWT access token."""
+    token = create_access_token(user_id=user.id, role=user.role)
+    return {"Authorization": f"Bearer {token}"}
 
 
 class TestModeratorProblemActivities:
@@ -42,7 +49,7 @@ class TestModeratorProblemActivities:
         response = await async_client.post(
             "/api-v1/problems",
             json=payload,
-            headers={"Authorization": f"Bearer {moderator_user.id}"},
+            headers=auth_headers(moderator_user),
         )
         assert response.status_code == 201
         data = response.json()
@@ -83,7 +90,7 @@ class TestModeratorProblemActivities:
         response = await async_client.patch(
             f"/api-v1/problems/{problem.id}",
             json={"difficulty": "medium", "topic": "binary_search"},
-            headers={"Authorization": f"Bearer {moderator_user.id}"},
+            headers=auth_headers(moderator_user),
         )
         assert response.status_code == 200
         data = response.json()
@@ -122,7 +129,7 @@ class TestModeratorProblemActivities:
         response = await async_client.patch(
             f"/api-v1/problems/{problem.id}/status",
             json={"status": "published"},
-            headers={"Authorization": f"Bearer {moderator_user.id}"},
+            headers=auth_headers(moderator_user),
         )
         assert response.status_code == 200
         assert response.json()["status"] == "published"
@@ -158,7 +165,7 @@ class TestModeratorProblemActivities:
 
         response = await async_client.delete(
             f"/api-v1/problems/{problem.id}",
-            headers={"Authorization": f"Bearer {moderator_user.id}"},
+            headers=auth_headers(moderator_user),
         )
         assert response.status_code == 200
         assert "deleted successfully" in response.json()["message"]
@@ -191,7 +198,7 @@ class TestModeratorProblemActivities:
                 "difficulty": "easy",
                 "topic": "recursion",
             },
-            headers={"Authorization": f"Bearer {normal_user.id}"},
+            headers=auth_headers(normal_user),
         )
         assert response.status_code == 403
 
@@ -303,7 +310,7 @@ class TestPublicProblemListingAndFiltering:
         response = await async_client.post(
             "/api-v1/problems/full",
             json=payload,
-            headers={"Authorization": f"Bearer {moderator_user.id}"},
+            headers=auth_headers(moderator_user),
         )
         assert response.status_code == 201
         data = response.json()
