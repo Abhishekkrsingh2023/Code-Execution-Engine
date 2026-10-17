@@ -249,7 +249,7 @@ def compile_and_run_code(submission_data: dict) -> dict:
         try:
             container.remove_container()
         except Exception as e:
-            log.error("Failed to remove container for %s: %s", submission_id, e)
+            log.error("Failed to remove container for {}: {}", submission_id, e)
 
 
 # ── Main processing loop ─────────────────────────────────────────────────────
@@ -268,7 +268,7 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
     every call and tears it down immediately afterwards, which causes
     ``RuntimeError: Task attached to a different loop`` on the second submission.
     """
-    log.info("Worker ready — waiting for jobs on '%s'", QUEUE_NAME)
+    log.info("Worker ready — waiting for jobs on '{}'", QUEUE_NAME)
 
     while True:
         # brpop with timeout=30 so the loop wakes up periodically and can
@@ -285,7 +285,7 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
         submission_key = f"{SUBMISSION_KEY}{submission_id}"
 
         log.info(
-            "Processing submission %s (mode=%s, lang=%s)", submission_id, mode, data["language"]
+            "Processing submission {} (mode={}, lang={})", submission_id, mode, data["language"]
         )
 
         # Mark the submission as running so pollers can distinguish
@@ -295,7 +295,7 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
         try:
             results = compile_and_run_code(data)
         except Exception as e:
-            log.exception("Unhandled error for submission %s", submission_id)
+            log.exception("Unhandled error for submission {}", submission_id)
             results = {
                 "status": JobStatus.FAILED.value,
                 "output": "",
@@ -335,14 +335,14 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
                 full_data = {**data, **results}
                 loop.run_until_complete(record_submission_completion(submission_id, full_data))
                 log.info(
-                    "Persisted submission %s to PostgreSQL and updated user leaderboard score",
+                    "Persisted submission {} to PostgreSQL and updated user leaderboard score",
                     submission_id,
                 )
             except Exception as exc:
-                log.warning("Could not sync submission %s to database: %s", submission_id, exc)
+                log.warning("Could not sync submission {} to database: {}", submission_id, exc)
         else:
             log.info(
-                "Submission %s in 'run' mode: marks and leaderboard NOT updated", submission_id
+                "Submission {} in 'run' mode: marks and leaderboard NOT updated", submission_id
             )
 
         # Clean up the submission's source directory from disk
@@ -352,10 +352,10 @@ def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
         except FileNotFoundError:
             pass  # already removed — benign
         except Exception as e:
-            log.error("Cleanup failed for %s: %s", submission_id, e)
+            log.error("Cleanup failed for {}: {}", submission_id, e)
 
         log.info(
-            "Finished submission %s — status=%s, score=%s/%s",
+            "Finished submission {} — status={}, score={}/{}",
             submission_id,
             results["status"],
             results.get("score"),
@@ -384,11 +384,11 @@ def main() -> None:
                 process_jobs(client, loop)
             except redis.ConnectionError as e:
                 log.error(
-                    "Redis connection lost: %s — reconnecting in %ds…", e, REDIS_RECONNECT_DELAY
+                    "Redis connection lost: {} — reconnecting in {}s…", e, REDIS_RECONNECT_DELAY
                 )
                 time.sleep(REDIS_RECONNECT_DELAY)
             except redis.TimeoutError as e:
-                log.error("Redis timeout: %s — reconnecting in %ds…", e, REDIS_RECONNECT_DELAY)
+                log.error("Redis timeout: {} — reconnecting in {}s…", e, REDIS_RECONNECT_DELAY)
                 time.sleep(REDIS_RECONNECT_DELAY)
             except KeyboardInterrupt:
                 log.info("Worker shutting down.")
