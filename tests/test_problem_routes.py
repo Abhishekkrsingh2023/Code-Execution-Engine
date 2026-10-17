@@ -279,7 +279,7 @@ class TestPublicProblemListingAndFiltering:
             "time_limit": 1.5,
             "memory_limit": 128,
             "status": "published",
-            "problem_code": "0002",
+            "problem_code": 2,
             "run_test_cases": [
                 {"input": "race a car", "expected_output": "false"},
                 {"input": "A man, a plan, a canal: Panama", "expected_output": "true"},
@@ -308,7 +308,7 @@ class TestPublicProblemListingAndFiltering:
         assert response.status_code == 201
         data = response.json()
         assert data["problem"]["title"] == "Valid Palindrome"
-        assert data["problem_code"] == "0002"
+        assert data["problem_code"] == 2
         assert len(data["run_test_cases"]) == 2
         assert len(data["submit_test_cases"]) == 2
         assert len(data["templates"]) == 2
@@ -333,4 +333,5 @@ class TestPublicProblemListingAndFiltering:
         tmpl_res = await async_client.get("/api-v1/problems/templates/common")
         assert tmpl_res.status_code == 200
         tmpls = tmpl_res.json()
-        assert any(t["problem_id"] == "0002" for t in tmpls)
+        assert any(t["problem_id"] == 2 for t in tmpls)
+

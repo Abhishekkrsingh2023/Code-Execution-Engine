@@ -471,8 +471,7 @@ async def handle_create_full_problem(
             db.add(tc_row)
 
         # 3. Create or update CommonProblemTemplate
-        code_id = payload.problem_code.strip() if payload.problem_code else f"{new_problem.id:04d}"
-        code_id = code_id[:4].zfill(4)
+        code_id = int(payload.problem_id or payload.problem_code or new_problem.id)
 
         stmt_common = select(CommonProblemTemplate).where(
             CommonProblemTemplate.problem_id == code_id
@@ -552,6 +551,7 @@ async def handle_create_full_problem(
         return FullProblemResponse(
             problem=ProblemResponse.model_validate(new_problem),
             problem_code=code_id,
+            problem_id=code_id,
             run_test_cases=payload.run_test_cases,
             submit_test_cases=payload.submit_test_cases,
             templates=[ProblemTemplateResponse.model_validate(t) for t in created_templates],
@@ -594,7 +594,7 @@ async def handle_get_full_problem(
             detail=f"Problem with ID {problem_id} not found.",
         )
 
-    code_id = f"{problem.id:04d}"[-4:]
+    code_id = problem.id
     stmt_common = (
         select(CommonProblemTemplate)
         .where(
@@ -630,6 +630,7 @@ async def handle_get_full_problem(
     return FullProblemResponse(
         problem=ProblemResponse.model_validate(problem),
         problem_code=code_id,
+        problem_id=code_id,
         run_test_cases=run_tcs,
         submit_test_cases=submit_tcs,
         templates=templates,
@@ -647,16 +648,26 @@ async def handle_list_common_templates(
 
 
 async def handle_get_common_template(
-    problem_id: str,
+    problem_id: int,
     db: AsyncSession,
 ) -> CommonProblemTemplateResponse:
-    """Retrieves common problem template by 4-character ID."""
+    """Retrieves common problem template by integer ID."""
     stmt = select(CommonProblemTemplate).where(CommonProblemTemplate.problem_id == problem_id)
     tmpl = (await db.execute(stmt)).scalar_one_or_none()
     if tmpl is None:
+        # Fallback to check if a problem with this id exists and match by statement
+        stmt_prob = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
+        prob = (await db.execute(stmt_prob)).scalar_one_or_none()
+        if prob:
+            stmt_fallback = select(CommonProblemTemplate).where(
+                CommonProblemTemplate.problem_statement == prob.description
+            )
+            tmpl = (await db.execute(stmt_fallback)).scalar_one_or_none()
+
+    if tmpl is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Common problem template '{problem_id}' not found.",
+            detail=f"Common problem template for problem ID '{problem_id}' not found.",
         )
     return CommonProblemTemplateResponse.model_validate(tmpl)
 
@@ -668,7 +679,7 @@ async def handle_create_or_update_common_template(
     db: AsyncSession,
 ) -> CommonProblemTemplateResponse:
     """Creates or updates a common problem template."""
-    code_id = payload.problem_id.strip()[:4].zfill(4)
+    code_id = int(payload.problem_id)
     stmt = select(CommonProblemTemplate).where(CommonProblemTemplate.problem_id == code_id)
     existing = (await db.execute(stmt)).scalar_one_or_none()
 

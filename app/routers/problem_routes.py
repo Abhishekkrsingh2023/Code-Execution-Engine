@@ -133,14 +133,15 @@ async def list_common_templates(
     "/templates/common/{problem_id}",
     response_model=CommonProblemTemplateResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get common problem template by 4-character ID",
+    summary="Get common problem template by integer problem ID",
 )
 async def get_common_template(
-    problem_id: str,
+    problem_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> CommonProblemTemplateResponse:
-    """Retrieves a common problem template by its 4-character identifier."""
+    """Retrieves a common problem template by its integer problem identifier."""
     return await handle_get_common_template(problem_id=problem_id, db=db)
+
 
 
 @router.post(

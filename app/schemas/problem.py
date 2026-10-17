@@ -3,6 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
 from app.models.problem import ProblemDifficulty, ProblemStatus
 
 
@@ -106,6 +107,9 @@ class ProblemResponse(BaseModel):
     """Public representation of a problem."""
 
     id: int = Field(..., description="Unique problem identifier.")
+    problem_code: int | None = Field(
+        default=None, description="Integer problem identifier matching id."
+    )
     title: str = Field(..., description="Problem title.")
     description: str = Field(..., description="Problem description.")
     difficulty: ProblemDifficulty = Field(..., description="Problem difficulty.")
@@ -179,7 +183,7 @@ class ProblemTemplateItem(BaseModel):
 class ProblemTemplateResponse(BaseModel):
     """Public representation of a problem template."""
 
-    problem_id: str = Field(..., description="4-character problem ID.")
+    problem_id: int = Field(..., description="Integer problem ID.")
     language: str = Field(..., description="Programming language.")
     boilerplate_code: str | None = Field(default=None, description="Starter boilerplate code.")
     created_at: datetime = Field(..., description="Creation timestamp in UTC.")
@@ -191,8 +195,8 @@ class ProblemTemplateResponse(BaseModel):
 class CommonProblemTemplateCreateRequest(BaseModel):
     """Schema for creating or updating a common problem template."""
 
-    problem_id: str = Field(
-        ..., min_length=1, max_length=4, description="4-character problem identifier."
+    problem_id: int = Field(
+        ..., ge=1, description="Integer problem identifier matching problems table."
     )
     problem_statement: str = Field(
         ..., min_length=5, description="Problem statement text or markdown."
@@ -213,7 +217,7 @@ class CommonProblemTemplateCreateRequest(BaseModel):
 class CommonProblemTemplateResponse(BaseModel):
     """Public representation of a common problem template."""
 
-    problem_id: str = Field(..., description="4-character problem identifier.")
+    problem_id: int = Field(..., description="Integer problem identifier.")
     problem_statement: str = Field(..., description="Problem statement text.")
     time_limit: float = Field(..., description="Execution time limit in seconds.")
     run_test_cases: list[dict] = Field(..., description="Run test cases.")
@@ -244,9 +248,12 @@ class FullProblemCreateRequest(BaseModel):
         default=ProblemStatus.PUBLISHED, description="Publication status."
     )
 
-    # 4-character ID for common_problem_templates (optional, auto-generated if omitted)
-    problem_code: str | None = Field(
-        None, max_length=4, description="Custom 4-character problem ID for templates."
+    # Integer ID for templates (optional, auto-assigned from created Problem.id if omitted)
+    problem_code: int | None = Field(
+        None, ge=1, description="Custom integer problem ID for templates."
+    )
+    problem_id: int | None = Field(
+        None, ge=1, description="Custom integer problem ID for templates (alias)."
     )
 
     # Test cases: Common run & submit
@@ -273,7 +280,8 @@ class FullProblemResponse(BaseModel):
     """Detailed response containing problem, test cases, and templates."""
 
     problem: ProblemResponse = Field(..., description="Problem core details.")
-    problem_code: str = Field(..., description="4-character problem ID in template system.")
+    problem_code: int = Field(..., description="Integer problem ID in template system.")
+    problem_id: int | None = Field(None, description="Integer problem ID in template system.")
     run_test_cases: list[dict] = Field(default_factory=list, description="Run test cases.")
     submit_test_cases: list[dict] = Field(default_factory=list, description="Submit test cases.")
     templates: list[ProblemTemplateResponse] = Field(
@@ -282,3 +290,4 @@ class FullProblemResponse(BaseModel):
     test_cases_count: int = Field(default=0, description="Total test cases in database.")
 
     model_config = ConfigDict(from_attributes=True)
+

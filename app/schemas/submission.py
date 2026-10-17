@@ -17,7 +17,7 @@ def get_uuid() -> str:
 
 class TestCase(BaseModel):
     __test__ = False
-    id: str | None = Field(default=None, description="Optional test case identifier.")
+    id: int | None = Field(default=None, description="Optional integer test case identifier.")
     input: str = Field(..., description="Input provided to the user's program.")
     expected_output: str = Field(..., description="Expected output for the given input.")
     weight: float = Field(
@@ -35,7 +35,7 @@ class SubmissionRequest(BaseModel):
     """This class represents a request to run or submit code for execution.
 
     Attributes:
-        problem_id (str): Unique identifier of the programming problem.
+        problem_id (int): Unique integer identifier of the programming problem matching problems table.
         submission_id (str): Unique identifier for the submission.
         problem_name (str | None): Name of the programming problem.
         user_code (str): Source code submitted by the user.
@@ -46,7 +46,11 @@ class SubmissionRequest(BaseModel):
         user_id (str | None): Optional user identifier submitting the code.
     """
 
-    problem_id: str = Field(..., description="Unique identifier of the programming problem.")
+    problem_id: int = Field(
+        ...,
+        ge=1,
+        description="Unique integer identifier of the programming problem matching problems table.",
+    )
     submission_id: str = Field(
         default_factory=get_uuid, description="Unique identifier for the submission."
     )

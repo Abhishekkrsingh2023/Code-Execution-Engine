@@ -311,7 +311,7 @@ class TestLeaderboardRoutes:
 
         payload = {
             "submission_id": sub_uuid,
-            "problem_id": str(sample_problem.id),
+            "problem_id": sample_problem.id,
             "problem_name": sample_problem.title,
             "user_code": "def solve(): print('done')",
             "language": "python",
@@ -375,7 +375,7 @@ class TestLeaderboardRoutes:
 
         payload = {
             "submission_id": sub_uuid,
-            "problem_id": str(sample_problem.id),
+            "problem_id": sample_problem.id,
             "problem_name": sample_problem.title,
             "user_code": "def solve(): print('done')",
             "language": "python",

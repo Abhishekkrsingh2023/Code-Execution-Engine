@@ -133,3 +133,15 @@ class Problem(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    @property
+    def problem_code(self) -> int | None:
+        """Returns the integer problem code matching problem.id."""
+        return self.id
+
+    @property
+    def problem_id(self) -> int | None:
+        """Alias for id to ensure consistency across problem references."""
+        return self.id
+
+

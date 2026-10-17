@@ -36,7 +36,7 @@ language_extension = {
 
 
 async def load_problem_test_cases(
-    problem_id_str: str,
+    problem_id_val: int | str,
     mode: str,
     db: AsyncSession | None,
 ) -> tuple[list[TestCase], float | None, str | None]:
@@ -48,28 +48,23 @@ async def load_problem_test_cases(
     if db is None:
         return [], None, None
 
-    cleaned = str(problem_id_str).strip()
+    cleaned = str(problem_id_val).strip()
     problem: Problem | None = None
 
     if cleaned.isdigit():
         stmt = select(Problem).where(Problem.id == int(cleaned), Problem.is_deleted.is_(False))
         problem = (await db.execute(stmt)).scalar_one_or_none()
 
-    if problem is None and len(cleaned) <= 4:
-        try:
-            num = int(cleaned)
-            stmt = select(Problem).where(Problem.id == num, Problem.is_deleted.is_(False))
-            problem = (await db.execute(stmt)).scalar_one_or_none()
-        except ValueError:
-            pass
-
     if problem is None:
         stmt = select(Problem).where(Problem.title.ilike(cleaned), Problem.is_deleted.is_(False))
         problem = (await db.execute(stmt)).scalars().first()
 
-    code_id = f"{problem.id:04d}"[-4:] if problem else cleaned[:4].zfill(4)
-    stmt_common = select(CommonProblemTemplate).where(CommonProblemTemplate.problem_id == code_id)
-    common_tmpl = (await db.execute(stmt_common)).scalar_one_or_none()
+    code_id = problem.id if problem else (int(cleaned) if cleaned.isdigit() else None)
+    common_tmpl = None
+    if code_id is not None:
+        stmt_common = select(CommonProblemTemplate).where(CommonProblemTemplate.problem_id == code_id)
+        common_tmpl = (await db.execute(stmt_common)).scalar_one_or_none()
+
     if not common_tmpl and problem:
         stmt_common_desc = select(CommonProblemTemplate).where(
             CommonProblemTemplate.problem_statement == problem.description
@@ -85,7 +80,7 @@ async def load_problem_test_cases(
             if hidden_tcs:
                 raw_cases = [
                     {
-                        "id": str(tc.id),
+                        "id": tc.id,
                         "input": tc.input,
                         "expected_output": tc.expected_output,
                         "weight": tc.weight,
@@ -95,7 +90,7 @@ async def load_problem_test_cases(
             elif db_tcs:
                 raw_cases = [
                     {
-                        "id": str(tc.id),
+                        "id": tc.id,
                         "input": tc.input,
                         "expected_output": tc.expected_output,
                         "weight": tc.weight,
@@ -115,7 +110,7 @@ async def load_problem_test_cases(
             if sample_tcs:
                 raw_cases = [
                     {
-                        "id": str(tc.id),
+                        "id": tc.id,
                         "input": tc.input,
                         "expected_output": tc.expected_output,
                         "weight": tc.weight,
@@ -125,7 +120,7 @@ async def load_problem_test_cases(
             elif db_tcs:
                 raw_cases = [
                     {
-                        "id": str(tc.id),
+                        "id": tc.id,
                         "input": tc.input,
                         "expected_output": tc.expected_output,
                         "weight": tc.weight,
@@ -140,7 +135,7 @@ async def load_problem_test_cases(
 
     test_cases = [
         TestCase(
-            id=str(rc.get("id")) if rc.get("id") else None,
+            id=int(rc["id"]) if rc.get("id") is not None and str(rc["id"]).isdigit() else None,
             input=str(rc.get("input", "")),
             expected_output=str(rc.get("expected_output", "")),
             weight=float(rc.get("weight", 1.0) or 1.0),

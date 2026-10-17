@@ -11,18 +11,23 @@ from app.models.submission import Submission, SubmissionLanguage, SubmissionStat
 from app.models.user import User, UserStatus
 
 
-async def resolve_problem_id(problem_id_str: str | None, db: AsyncSession) -> int | None:
-    """Resolves a problem string (either numeric ID or 4-digit zero-padded code) to an integer Problem.id."""
-    if not problem_id_str:
+async def resolve_problem_id(problem_id_val: int | str | None, db: AsyncSession) -> int | None:
+    """Resolves a problem identifier (numeric ID or title) to an integer Problem.id."""
+    if problem_id_val is None:
         return None
-    cleaned = str(problem_id_str).strip()
+    cleaned = str(problem_id_val).strip()
+    if not cleaned:
+        return None
     if cleaned.isdigit():
         val = int(cleaned)
         stmt = select(Problem.id).where(Problem.id == val, Problem.is_deleted.is_(False))
         found = (await db.execute(stmt)).scalar_one_or_none()
         if found is not None:
             return found
-    return None
+
+    # Fallback to title matching
+    stmt_title = select(Problem.id).where(Problem.title.ilike(cleaned), Problem.is_deleted.is_(False))
+    return (await db.execute(stmt_title)).scalars().first()
 
 
 async def update_user_leaderboard_score(user_id: uuid.UUID, db: AsyncSession) -> tuple[float, int]:

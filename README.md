@@ -394,7 +394,7 @@ Runs code against custom test cases or sample test cases for immediate feedback.
 - **Request Body**:
 ```json
 {
-  "problem_id": "1",
+  "problem_id": 1,
   "problem_name": "Two Sum",
   "user_code": "def solve():\n    import sys\n    data = sys.stdin.read().split()\n    if data:\n        print(int(data[0]) + int(data[1]))\n\nsolve()",
   "language": "python",
@@ -433,7 +433,7 @@ Submits code for official evaluation against **internal test cases loaded from t
 - **Request Body** (Client does not need to provide test cases):
 ```json
 {
-  "problem_id": "1",
+  "problem_id": 1,
   "user_code": "def solve():\n    import sys\n    data = sys.stdin.read().split()\n    if data:\n        print(int(data[0]) + int(data[1]))\n\nsolve()",
   "language": "python",
   "mode": "submit",

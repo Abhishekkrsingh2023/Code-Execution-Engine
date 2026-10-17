@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -10,7 +10,7 @@ from app.models.base import _utcnow
 class CommonProblemTemplate(Base):
     __tablename__ = "common_problem_templates"
 
-    problem_id: Mapped[str] = mapped_column(String(4), primary_key=True)
+    problem_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     problem_statement: Mapped[str] = mapped_column(Text, nullable=False)
     run_test_cases: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     time_limit: Mapped[float] = mapped_column(Float, default=2.0)
@@ -31,8 +31,8 @@ class CommonProblemTemplate(Base):
 class ProblemTemplate(Base):
     __tablename__ = "problem_templates"
 
-    problem_id: Mapped[str] = mapped_column(
-        String(4),
+    problem_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("common_problem_templates.problem_id", ondelete="CASCADE"),
         primary_key=True,
     )

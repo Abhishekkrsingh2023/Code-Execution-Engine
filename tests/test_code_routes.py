@@ -49,7 +49,7 @@ class TestCodeSubmitRoute:
         - app/code/{id}/Main.py is created on disk with exact user code.
         """
         payload = {
-            "problem_id": "prob-001",
+            "problem_id": 1,
             "problem_name": "Two Sum",
             "user_code": "def solve(): print('hello')",
             "language": "python",
@@ -107,7 +107,7 @@ class TestCodeSubmitRoute:
         Assert: Code file is saved on disk with the matching extension (Main.cpp, Main.java, Main.c).
         """
         payload = {
-            "problem_id": f"prob-{language}",
+            "problem_id": 1,
             "problem_name": "Sample Problem",
             "user_code": "// solution code",
             "language": language,
@@ -133,7 +133,7 @@ class TestCodeSubmitRoute:
         Assert: 422 Unprocessable Entity due to Language Enum validation.
         """
         payload = {
-            "problem_id": "prob-001",
+            "problem_id": 1,
             "problem_name": "Two Sum",
             "user_code": "puts 'hello'",
             "language": "ruby",
@@ -153,7 +153,7 @@ class TestCodeSubmitRoute:
         Assert: 422 Unprocessable Entity (min_length=1 constraint).
         """
         payload = {
-            "problem_id": "prob-001",
+            "problem_id": 1,
             "problem_name": "Two Sum",
             "user_code": "",
             "language": "python",
@@ -173,7 +173,7 @@ class TestCodeSubmitRoute:
         Assert: 404 Not Found since submit loads internal test cases.
         """
         payload = {
-            "problem_id": "prob-nonexistent-999",
+            "problem_id": 999999,
             "problem_name": "Two Sum",
             "user_code": "print('hello')",
             "language": "python",
@@ -194,7 +194,7 @@ class TestCodeSubmitRoute:
         Assert: 422 Unprocessable Entity (extra='forbid' constraint).
         """
         payload = {
-            "problem_id": "prob-001",
+            "problem_id": 1,
             "problem_name": "Two Sum",
             "user_code": "print('hello')",
             "language": "python",
@@ -218,7 +218,7 @@ class TestCodeSubmitRoute:
         - Directory created for the submission is removed from disk.
         """
         payload = {
-            "problem_id": "prob-001",
+            "problem_id": 1,
             "problem_name": "Two Sum",
             "user_code": "print('fail test')",
             "language": "python",
@@ -366,7 +366,7 @@ class TestRunVsSubmitDistinction:
         await db_session.commit()
 
         payload = {
-            "problem_id": str(problem.id),
+            "problem_id": problem.id,
             "user_code": "print(56)",
             "language": "python",
         }
@@ -403,7 +403,7 @@ class TestRunVsSubmitDistinction:
         Assert: 200 OK with mode='run', custom test cases preserved in Redis.
         """
         payload = {
-            "problem_id": "custom-run-prob",
+            "problem_id": 1,
             "problem_name": "Ad-hoc Run",
             "user_code": "import sys; print(sys.stdin.read().strip())",
             "language": "python",
@@ -468,7 +468,7 @@ class TestRunVsSubmitDistinction:
         await db_session.commit()
 
         payload = {
-            "problem_id": str(problem.id),
+            "problem_id": problem.id,
             "user_code": "print('sample_out')",
             "language": "python",
         }
@@ -536,7 +536,7 @@ class TestRunVsSubmitDistinction:
         run_res = await async_client.post(
             "/api-v1/code/run",
             json={
-                "problem_id": str(problem.id),
+                "problem_id": problem.id,
                 "user_code": "print(20)",
                 "language": "python",
                 "test_cases": [{"input": "10", "expected_output": "20", "weight": 100.0}],
@@ -573,7 +573,7 @@ class TestRunVsSubmitDistinction:
         submit_res = await async_client.post(
             "/api-v1/code/submit",
             json={
-                "problem_id": str(problem.id),
+                "problem_id": problem.id,
                 "user_code": "print(20)",
                 "language": "python",
             },
@@ -604,4 +604,55 @@ class TestRunVsSubmitDistinction:
         await db_session.refresh(user)
         assert user.total_score == 100.0
         assert user.problems_solved == 1
+
+    async def test_submission_with_integer_problem_id_and_test_case_id(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+    ) -> None:
+        """Verify that integer problem_id and integer test case id are accepted without type mismatch."""
+        problem = Problem(
+            title="Integer Problem ID Test",
+            description="Testing integer problem ID compatibility",
+            difficulty=ProblemDifficulty.EASY,
+            status=ProblemStatus.PUBLISHED,
+        )
+        db_session.add(problem)
+        await db_session.commit()
+        await db_session.refresh(problem)
+
+        tc = TestCaseModel(
+            problem_id=problem.id,
+            input="hello",
+            expected_output="hello",
+            is_sample=True,
+            weight=10.0,
+        )
+        db_session.add(tc)
+        await db_session.commit()
+        await db_session.refresh(tc)
+
+        # Submission with integer problem_id and integer test case id
+        payload = {
+            "problem_id": problem.id,
+            "problem_name": problem.title,
+            "user_code": "import sys; print(sys.stdin.read().strip())",
+            "language": "python",
+            "mode": "run",
+            "test_cases": [
+                {
+                    "id": tc.id,
+                    "input": "hello",
+                    "expected_output": "hello",
+                    "weight": 10.0,
+                }
+            ],
+        }
+
+        response = await async_client.post("/api-v1/code/run", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["mode"] == "run"
+        assert data["status"] == "queued"
+
 
