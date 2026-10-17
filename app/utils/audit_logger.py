@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
 from app.database import SessionLocal
@@ -158,15 +158,33 @@ async def log_audit_event(
         ip_address=ip_address,
     )
 
-    # Always persist in an independent session so we never call commit() on the
-    # caller's active business transaction (which would prematurely flush it and
-    # make a subsequent rollback a no-op). The db parameter is intentionally
-    # ignored for persistence; it is kept in the signature for backward compat.
     if db is not None:
-        logger.debug(
-            "audit_logger: ignoring caller's db session to avoid double-commit; "
-            "persisting audit entry in a fresh session instead."
-        )
+        try:
+            db.add(audit_entry)
+            await db.commit()
+            await db.refresh(audit_entry)
+            return audit_entry
+        except Exception as exc:
+            logger.warning(
+                "Failed to persist audit log using active session: {}. Retrying with fresh session.",
+                exc,
+            )
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            if db.bind:
+                try:
+                    bound_factory = async_sessionmaker(
+                        bind=db.bind, class_=AsyncSession, autoflush=False, expire_on_commit=False
+                    )
+                    async with bound_factory() as bound_fresh_db:
+                        bound_fresh_db.add(audit_entry)
+                        await bound_fresh_db.commit()
+                        await bound_fresh_db.refresh(audit_entry)
+                        return audit_entry
+                except Exception as inner_exc:
+                    logger.warning("Failed to persist audit log with bound session: {}", inner_exc)
 
     async with SessionLocal() as fresh_db:
         fresh_db.add(audit_entry)
