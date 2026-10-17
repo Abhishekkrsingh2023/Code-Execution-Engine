@@ -23,8 +23,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import AsyncClient
 from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
+from app.models.test_case import TestCase as TestCaseModel
+from app.models.user import User, UserRole, UserStatus
+from app.utils.jwt import create_access_token
 
 
 class TestCodeSubmitRoute:
@@ -159,16 +164,16 @@ class TestCodeSubmitRoute:
 
         assert response.status_code == 422
 
-    async def test_submit_code_empty_test_cases_fails(
+    async def test_submit_code_unknown_problem_without_test_cases_returns_404(
         self,
         async_client: AsyncClient,
     ) -> None:
-        """Arrange: Payload with empty test_cases array.
+        """Arrange: Payload with unknown problem and empty test_cases.
         Act: POST to /api-v1/code/submit-code.
-        Assert: 422 Unprocessable Entity (min_length=1 constraint).
+        Assert: 404 Not Found since submit loads internal test cases.
         """
         payload = {
-            "problem_id": "prob-001",
+            "problem_id": "prob-nonexistent-999",
             "problem_name": "Two Sum",
             "user_code": "print('hello')",
             "language": "python",
@@ -177,7 +182,8 @@ class TestCodeSubmitRoute:
 
         response = await async_client.post("/api-v1/code/submit-code", json=payload)
 
-        assert response.status_code == 422
+        assert response.status_code == 404
+        assert "not found or has no internal test cases" in response.json()["detail"]
 
     async def test_submit_code_extra_fields_forbidden(
         self,
@@ -199,6 +205,7 @@ class TestCodeSubmitRoute:
         response = await async_client.post("/api-v1/code/submit-code", json=payload)
 
         assert response.status_code == 422
+
 
     async def test_submit_code_failure_cleans_up_directory_and_raises_500(
         self,
@@ -314,3 +321,287 @@ class TestCodePollingAndStreamingRoutes:
         response = await async_client.get("/api-v1/code/stream/not-a-valid-uuid")
 
         assert response.status_code == 422
+
+
+class TestRunVsSubmitDistinction:
+    """Test suite validating the behavioral distinction between /run and /submit."""
+
+    async def test_submit_route_loads_test_cases_internally(
+        self,
+        async_client: AsyncClient,
+        redis_client: Redis,
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Problem in DB with sample and hidden test cases.
+        Act: POST /api-v1/code/submit with NO test_cases in the request body.
+        Assert:
+        - 200 OK with mode='submit'.
+        - Internal hidden test case (is_sample=False) is loaded into the Redis job.
+        - Polling does NOT expose the internal test cases in the response.
+        """
+        problem = Problem(
+            title="Multiply Numbers",
+            description="Multiply two numbers.",
+            difficulty=ProblemDifficulty.EASY,
+            status=ProblemStatus.PUBLISHED,
+        )
+        db_session.add(problem)
+        await db_session.flush()
+
+        tc_sample = TestCaseModel(
+            problem_id=problem.id,
+            input="2 3",
+            expected_output="6",
+            is_sample=True,
+            weight=10.0,
+        )
+        tc_hidden = TestCaseModel(
+            problem_id=problem.id,
+            input="7 8",
+            expected_output="56",
+            is_sample=False,
+            weight=90.0,
+        )
+        db_session.add_all([tc_sample, tc_hidden])
+        await db_session.commit()
+
+        payload = {
+            "problem_id": str(problem.id),
+            "user_code": "print(56)",
+            "language": "python",
+        }
+
+        response = await async_client.post("/api-v1/code/submit", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["mode"] == "submit"
+        sub_id = data["submission"]
+
+        # Verify Redis hash has mode=submit and contains the hidden test case
+        sub_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{sub_id}"
+        redis_data = await redis_client.hgetall(sub_key)
+        assert redis_data["mode"] == "submit"
+        internal_tcs = json.loads(redis_data["test_cases"])
+        assert len(internal_tcs) == 1
+        assert internal_tcs[0]["input"] == "7 8"
+        assert internal_tcs[0]["expected_output"] == "56"
+
+        # Verify polling strips test_cases
+        poll_res = await async_client.get(f"/api-v1/code/submission/poll/{sub_id}")
+        assert poll_res.status_code == 200
+        poll_data = poll_res.json()
+        assert "test_cases" not in poll_data
+        assert poll_data["mode"] == "submit"
+
+    async def test_run_route_with_custom_test_cases(
+        self,
+        async_client: AsyncClient,
+        redis_client: Redis,
+    ) -> None:
+        """Arrange: User provides custom test cases to /api-v1/code/run.
+        Act: POST /api-v1/code/run.
+        Assert: 200 OK with mode='run', custom test cases preserved in Redis.
+        """
+        payload = {
+            "problem_id": "custom-run-prob",
+            "problem_name": "Ad-hoc Run",
+            "user_code": "import sys; print(sys.stdin.read().strip())",
+            "language": "python",
+            "test_cases": [{"input": "custom_data_123", "expected_output": "custom_data_123"}],
+        }
+
+        response = await async_client.post("/api-v1/code/run", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["mode"] == "run"
+        sub_id = data["submission"]
+
+        # Verify Redis hash
+        sub_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{sub_id}"
+        redis_data = await redis_client.hgetall(sub_key)
+        assert redis_data["mode"] == "run"
+        tcs = json.loads(redis_data["test_cases"])
+        assert len(tcs) == 1
+        assert tcs[0]["input"] == "custom_data_123"
+
+        # Polling preserves test_cases in run mode for caller debugging
+        poll_res = await async_client.get(f"/api-v1/code/submission/poll/{sub_id}")
+        assert poll_res.status_code == 200
+        poll_data = poll_res.json()
+        assert "test_cases" in poll_data
+        assert poll_data["mode"] == "run"
+
+    async def test_run_route_loads_sample_test_cases_from_db(
+        self,
+        async_client: AsyncClient,
+        redis_client: Redis,
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Problem in DB with sample test cases.
+        Act: POST /api-v1/code/run with NO test_cases.
+        Assert: Sample test cases (is_sample=True) are loaded internally.
+        """
+        problem = Problem(
+            title="Sample Test Case Problem",
+            description="Testing run mode sample loading.",
+            difficulty=ProblemDifficulty.EASY,
+            status=ProblemStatus.PUBLISHED,
+        )
+        db_session.add(problem)
+        await db_session.flush()
+
+        tc_sample = TestCaseModel(
+            problem_id=problem.id,
+            input="sample_in",
+            expected_output="sample_out",
+            is_sample=True,
+            weight=1.0,
+        )
+        tc_hidden = TestCaseModel(
+            problem_id=problem.id,
+            input="hidden_in",
+            expected_output="hidden_out",
+            is_sample=False,
+            weight=5.0,
+        )
+        db_session.add_all([tc_sample, tc_hidden])
+        await db_session.commit()
+
+        payload = {
+            "problem_id": str(problem.id),
+            "user_code": "print('sample_out')",
+            "language": "python",
+        }
+
+        response = await async_client.post("/api-v1/code/run", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["mode"] == "run"
+
+        sub_id = data["submission"]
+        sub_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{sub_id}"
+        redis_data = await redis_client.hgetall(sub_key)
+        assert redis_data["mode"] == "run"
+        tcs = json.loads(redis_data["test_cases"])
+        assert len(tcs) == 1
+        assert tcs[0]["input"] == "sample_in"
+
+    async def test_run_does_not_update_marks_while_submit_does(
+        self,
+        async_client: AsyncClient,
+        redis_client: Redis,
+        db_session: AsyncSession,
+    ) -> None:
+        """Verify the crucial distinction:
+        - Running code passes tests but does NOT update user's total_score or problems_solved.
+        - Submitting code passes tests and DOES update user's total_score and problems_solved.
+        """
+        # Create user
+        user = User(
+            username="coder_dan",
+            email="dan@example.com",
+            role=UserRole.USER,
+            status=UserStatus.ACTIVE,
+            is_email_verified=True,
+            total_score=0.0,
+            problems_solved=0,
+        )
+        db_session.add(user)
+        await db_session.flush()
+
+        # Create problem with 100-point hidden test case
+        problem = Problem(
+            title="Scored Problem",
+            description="Problem for scoring distinction.",
+            difficulty=ProblemDifficulty.MEDIUM,
+            status=ProblemStatus.PUBLISHED,
+        )
+        db_session.add(problem)
+        await db_session.flush()
+
+        tc_hidden = TestCaseModel(
+            problem_id=problem.id,
+            input="10",
+            expected_output="20",
+            is_sample=False,
+            weight=100.0,
+        )
+        db_session.add(tc_hidden)
+        await db_session.commit()
+
+        token = create_access_token(user.id, user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. RUN CODE
+        run_res = await async_client.post(
+            "/api-v1/code/run",
+            json={
+                "problem_id": str(problem.id),
+                "user_code": "print(20)",
+                "language": "python",
+                "test_cases": [{"input": "10", "expected_output": "20", "weight": 100.0}],
+            },
+            headers=headers,
+        )
+        assert run_res.status_code == 200
+        run_id = run_res.json()["submission"]
+
+        # Simulate completed execution in Redis
+        await redis_client.hset(
+            f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{run_id}",
+            mapping={
+                "status": "completed",
+                "score": 100.0,
+                "max_score": 100.0,
+                "tests_passed": 1,
+                "total_tests": 1,
+                "time_taken": 0.05,
+                "mode": "run",
+            },
+        )
+
+        # Poll run
+        poll_run = await async_client.get(f"/api-v1/code/submission/poll/{run_id}")
+        assert poll_run.status_code == 200
+
+        # Assert user score in DB remains 0.0!
+        await db_session.refresh(user)
+        assert user.total_score == 0.0
+        assert user.problems_solved == 0
+
+        # 2. SUBMIT CODE
+        submit_res = await async_client.post(
+            "/api-v1/code/submit",
+            json={
+                "problem_id": str(problem.id),
+                "user_code": "print(20)",
+                "language": "python",
+            },
+            headers=headers,
+        )
+        assert submit_res.status_code == 200
+        submit_id = submit_res.json()["submission"]
+
+        # Simulate completed execution in Redis
+        await redis_client.hset(
+            f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{submit_id}",
+            mapping={
+                "status": "completed",
+                "score": 100.0,
+                "max_score": 100.0,
+                "tests_passed": 1,
+                "total_tests": 1,
+                "time_taken": 0.05,
+                "mode": "submit",
+            },
+        )
+
+        # Poll submit
+        poll_submit = await async_client.get(f"/api-v1/code/submission/poll/{submit_id}")
+        assert poll_submit.status_code == 200
+
+        # Assert user score in DB IS updated to 100.0 and problems_solved to 1!
+        await db_session.refresh(user)
+        assert user.total_score == 100.0
+        assert user.problems_solved == 1
+

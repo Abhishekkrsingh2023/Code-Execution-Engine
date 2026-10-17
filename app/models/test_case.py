@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class TestCase(Base):
     __tablename__ = "test_cases"
+    __test__ = False
 
     id: Mapped[int] = mapped_column(
         Integer,

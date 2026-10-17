@@ -7,34 +7,48 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.code_controller import (
     handle_poll_submission,
+    handle_run_code_request,
     handle_stream_submission,
     handle_submit_code_request,
 )
 from app.database import get_db
 from app.dependencies import get_current_user_optional
 from app.models.user import User
-from app.schemas.submission import SubmissionRequest
+from app.schemas.submission import RunRequest, SubmissionRequest, SubmitRequest
 
 router = APIRouter(prefix="/api-v1/code", tags=["code"])
 
 
-@router.post("/submit-code")
-async def submit_code_request(
-    submission: SubmissionRequest,
+@router.post("/run", summary="Run code against sample or custom test cases (does not update marks)")
+@router.post("/run-code", include_in_schema=False)
+async def run_code_request(
+    submission: RunRequest,
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Submit code for execution.
-    This endpoint allows clients to submit code for execution. It handles the submission and returns a response with the submission status and streaming URL.
-    Args:
-        submission (SubmissionRequest): A request object containing the submission details.
-        current_user (User | None): Authenticated user making the submission (optional).
-        db (AsyncSession): Database session.
+    """Run code for testing and execution without updating marks or leaderboard.
 
-    Returns:
-        dict: A dictionary containing the submission status and streaming URL.
+    If test_cases are not provided, sample test cases from the problem are loaded.
+    Only the execution output/results are returned back to the user.
+    """
+    return await handle_run_code_request(submission, current_user=current_user, db=db)
+
+
+@router.post("/submit", summary="Submit code for evaluation against internal test cases (updates marks)")
+@router.post("/submit-code")
+async def submit_code_request(
+    submission: SubmitRequest,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Submit code for official problem evaluation against internal test cases.
+
+    Test cases are loaded internally from the database and evaluated in the background.
+    The response only returns evaluation results (tests passed, count, score) without exposing
+    internal test-case inputs and expected outputs, and user marks are updated accordingly.
     """
     return await handle_submit_code_request(submission, current_user=current_user, db=db)
+
 
 
 @router.get("/stream/{submission_id}")

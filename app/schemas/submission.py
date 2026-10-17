@@ -16,6 +16,7 @@ def get_uuid() -> str:
 
 
 class TestCase(BaseModel):
+    __test__ = False
     id: str | None = Field(default=None, description="Optional test case identifier.")
     input: str = Field(..., description="Input provided to the user's program.")
     expected_output: str = Field(..., description="Expected output for the given input.")
@@ -24,17 +25,23 @@ class TestCase(BaseModel):
     )
 
 
+
+class ExecutionMode(str, Enum):
+    run = "run"
+    submit = "submit"
+
+
 class SubmissionRequest(BaseModel):
-    """_summary_
-    This class represents a request to submit code for execution.
+    """This class represents a request to run or submit code for execution.
 
     Attributes:
         problem_id (str): Unique identifier of the programming problem.
         submission_id (str): Unique identifier for the submission.
-        problem_name (str): Name of the programming problem.
+        problem_name (str | None): Name of the programming problem.
         user_code (str): Source code submitted by the user.
         language (Language): Programming language of the submission.
-        test_cases (List[TestCase]): List of test cases against which the code will be executed
+        mode (ExecutionMode): Execution mode ('run' or 'submit').
+        test_cases (List[TestCase]): List of test cases. For 'run', custom test cases can be supplied or loaded from DB. For 'submit', test cases are loaded internally from DB.
         time_limit (float): Maximum execution time in seconds, default is 2.0 seconds.
         user_id (str | None): Optional user identifier submitting the code.
     """
@@ -43,11 +50,18 @@ class SubmissionRequest(BaseModel):
     submission_id: str = Field(
         default_factory=get_uuid, description="Unique identifier for the submission."
     )
-    problem_name: str = Field(..., description="Name of the programming problem.")
+    problem_name: str | None = Field(
+        default="Problem Submission", description="Name of the programming problem."
+    )
     user_code: str = Field(..., min_length=1, description="Source code submitted by the user.")
     language: Language = Field(..., description="Programming language of the submission.")
+    mode: ExecutionMode = Field(
+        default=ExecutionMode.submit,
+        description="Execution mode: 'run' (test run without updating marks) or 'submit' (evaluates against internal test cases, updates marks).",
+    )
     test_cases: list[TestCase] = Field(
-        ..., min_length=1, description="List of test cases against which the code will be executed."
+        default_factory=list,
+        description="List of test cases against which the code will be executed. For submit mode, test cases are loaded internally from the database.",
     )
     time_limit: float = Field(default=2.0, gt=0, description="Maximum execution time in seconds.")
     user_id: str | None = Field(
@@ -59,3 +73,18 @@ class SubmissionRequest(BaseModel):
         extra="forbid",
         str_strip_whitespace=True,
     )
+
+
+class RunRequest(SubmissionRequest):
+    mode: ExecutionMode = Field(
+        default=ExecutionMode.run,
+        description="Execution mode for run (defaults to 'run').",
+    )
+
+
+class SubmitRequest(SubmissionRequest):
+    mode: ExecutionMode = Field(
+        default=ExecutionMode.submit,
+        description="Execution mode for submit (defaults to 'submit').",
+    )
+

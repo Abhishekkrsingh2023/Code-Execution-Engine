@@ -76,9 +76,14 @@ finally:
 ```
 [ Client ] 
     │
-    │ 1. POST /api-v1/code/submit (user_code, main_code, test_cases)
+    ├──► 1a. POST /api-v1/code/run (mode="run", custom or sample test cases)
+    │        ↳ Quick verification; returns outputs/errors; DOES NOT update marks
+    │
+    └──► 1b. POST /api-v1/code/submit (mode="submit", test cases loaded internally)
+             ↳ Official evaluation; updates marks & leaderboard; test cases hidden
+    │
     ▼
-[ FastAPI Server ] ──► Stores metadata in Redis Hash (`submission:<id>`)
+[ FastAPI Server ] ──► Stores metadata in Redis Hash (`submission:<id>`, with `mode`)
     │              ──► Prepares workspace directory (`app/code/<id>/`)
     │              ──► Pushes job into Redis Queue (`code:queue`)
     │
@@ -93,16 +98,19 @@ finally:
     ├──► 4. Starts sandboxed container (--network none, memory/cpu limits)
     ├──► 5. Compiles code (if C/C++/Java)
     ├──► 6. Evaluates test cases sequentially with stdin/stdout
-    ├──► 7. Computes results & execution time
-    ├──► 8. Writes verdict to Redis (`submission:<id>`), sets durable `result:<id>`, and PUBLISHes
+    ├──► 7. Computes results, execution time, and passed test counts
+    ├──► 8. Writes verdict to Redis (`submission:<id>`), sets durable `result:<id>`, and PUBLISHes:
+    │        - mode="submit": sanitizes output (hides internal test cases) & updates DB + leaderboard
+    │        - mode="run": preserves outputs & skips DB leaderboard updates
     └──► 9. Teardown container & cleans up host files
     │
     ▼
 [ Redis Pub/Sub ] ──► Pushes live event to FastAPI SSE stream
     │
-    ▼ 10. GET /stream/{id} (Server-Sent Events)
+    ▼ 10. GET /stream/{id} (Server-Sent Events) or GET /submission/poll/{id}
 [ Client ]
 ```
+
 
 ---
 
@@ -377,26 +385,58 @@ uv run python worker/worker.py
 
 ## 📡 API Reference
 
-### 1. Submit Code for Execution
+### 1. Run Code (`POST /api-v1/code/run` or `/run-code`)
 
-- **Endpoint**: `POST /api-v1/code/submit`
+Runs code against custom test cases or sample test cases for immediate feedback. **Does not update user marks or leaderboard.**
+
+- **Endpoint**: `POST /api-v1/code/run`
+- **Mode Attribute**: `"run"`
 - **Request Body**:
 ```json
 {
-  "submission_id": "sub_101",
+  "problem_id": "1",
+  "problem_name": "Two Sum",
+  "user_code": "def solve():\n    import sys\n    data = sys.stdin.read().split()\n    if data:\n        print(int(data[0]) + int(data[1]))\n\nsolve()",
   "language": "python",
-  "main_code": "import sys\n\n{{ user_code }}\n\ndef main():\n    data = sys.stdin.read().strip()\n    print(Solution().reverse(data))\n\nif __name__ == '__main__':\n    main()",
-  "user_code": "class Solution:\n    def reverse(self, s: str) -> str:\n        return s[::-1]",
+  "mode": "run",
   "test_cases": [
     {
-      "input": "hello",
-      "expected_output": "olleh"
-    },
-    {
-      "input": "world",
-      "expected_output": "dlrow"
+      "input": "2 3\n",
+      "expected_output": "5\n"
     }
   ],
+  "time_limit": 2.0
+}
+```
+*(Note: If `test_cases` is omitted or empty, sample test cases `is_sample=True` are automatically loaded internally from the database).*
+
+- **Response (`200 OK`)**:
+```json
+{
+  "message": "Run request received successfully.",
+  "submission": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "status": "queued",
+  "mode": "run",
+  "streaming_url": "/api-v1/code/stream/f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "polling_url": "/api-v1/code/submission/poll/f47ac10b-58cc-4372-a567-0e02b2c3d479"
+}
+```
+
+---
+
+### 2. Submit Code (`POST /api-v1/code/submit` or `/submit-code`)
+
+Submits code for official evaluation against **internal test cases loaded from the database**. Evaluates results, **updates user marks & leaderboard stats**, and returns verdicts **without exposing internal test cases**.
+
+- **Endpoint**: `POST /api-v1/code/submit`
+- **Mode Attribute**: `"submit"`
+- **Request Body** (Client does not need to provide test cases):
+```json
+{
+  "problem_id": "1",
+  "user_code": "def solve():\n    import sys\n    data = sys.stdin.read().split()\n    if data:\n        print(int(data[0]) + int(data[1]))\n\nsolve()",
+  "language": "python",
+  "mode": "submit",
   "time_limit": 2.0
 }
 ```
@@ -405,41 +445,65 @@ uv run python worker/worker.py
 ```json
 {
   "message": "Submission received successfully.",
-  "submission": {
-    "submission_id": "sub_101",
-    "language": "python",
-    "time_limit": 2.0
-  }
+  "submission": "a9b8c7d6-1234-5678-90ab-cdef12345678",
+  "status": "queued",
+  "mode": "submit",
+  "streaming_url": "/api-v1/code/stream/a9b8c7d6-1234-5678-90ab-cdef12345678",
+  "polling_url": "/api-v1/code/submission/poll/a9b8c7d6-1234-5678-90ab-cdef12345678"
 }
 ```
 
-### 2. Stream Submission Result via Server-Sent Events (SSE)
+---
 
-- **Endpoint**: `GET /stream/{job_id}` or `GET /api-v1/code/stream/{job_id}`
+### 3. Stream Submission Result via Server-Sent Events (SSE)
+
+- **Endpoint**: `GET /api-v1/code/stream/{submission_id}`
 - **Header**: `Accept: text/event-stream`
-- **Behavior**: Client maintains a single HTTP connection. Server pushes `: keepalive` heartbeats and pushes the final verdict the moment execution completes via Redis pub/sub.
+- **Behavior**: Server pushes `: keepalive` heartbeats and pushes the final verdict the moment execution completes via Redis pub/sub.
 - **SSE Stream Response**:
 ```text
 : keepalive
 
 event: result
-data: {"submission_id": "sub_101", "status": "completed", "time_taken": "0.1423", "error": "", "output": "", "results": "[{\"status\": \"passed\", \"output\": \"olleh\", \"error\": \"\"}]"}
+data: {"submission_id": "a9b8c7d6-1234-5678-90ab-cdef12345678", "mode": "submit", "status": "completed", "time_taken": 0.1245, "score": 100.0, "max_score": 100.0, "tests_passed": 2, "total_tests": 2, "results": "[{\"test_case\": 1, \"status\": \"passed\", \"weight\": 50.0, \"score\": 50.0}, {\"test_case\": 2, \"status\": \"passed\", \"weight\": 50.0, \"score\": 50.0}]"}
 ```
 
-### 3. Poll Submission Result (Fallback)
+---
+
+### 4. Poll Submission Result
 
 - **Endpoint**: `GET /api-v1/code/submission/poll/{submission_id}`
-- **Response (`200 OK`)**:
+- **Response for Submit (`200 OK`)** (Internal test cases stripped; shows tests passed count and updates marks):
 ```json
 {
-  "submission_id": "sub_101",
+  "submission_id": "a9b8c7d6-1234-5678-90ab-cdef12345678",
+  "mode": "submit",
   "status": "completed",
-  "time_taken": "0.1423",
-  "error": "",
-  "output": "",
-  "results": "[{\"status\": \"passed\", \"output\": \"olleh\", \"error\": \"\"}, {\"status\": \"passed\", \"output\": \"dlrow\", \"error\": \"\"}]"
+  "score": 100.0,
+  "max_score": 100.0,
+  "tests_passed": 2,
+  "total_tests": 2,
+  "time_taken": 0.1245,
+  "results": "[{\"test_case\": 1, \"status\": \"passed\", \"weight\": 50.0, \"score\": 50.0}, {\"test_case\": 2, \"status\": \"passed\", \"weight\": 50.0, \"score\": 50.0}]"
 }
 ```
+- **Response for Run (`200 OK`)** (Preserves outputs & test cases for debugging; does not update marks):
+```json
+{
+  "submission_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "mode": "run",
+  "status": "completed",
+  "score": 100.0,
+  "max_score": 100.0,
+  "tests_passed": 1,
+  "total_tests": 1,
+  "time_taken": 0.0821,
+  "output": "5\n",
+  "test_cases": "[{\"input\": \"2 3\\n\", \"expected_output\": \"5\\n\", \"weight\": 1.0}]",
+  "results": "[{\"status\": \"passed\", \"output\": \"5\\n\", \"error\": \"\", \"weight\": 1.0, \"score\": 1.0}]"
+}
+```
+
 
 ### 4. Problem Template Management
 

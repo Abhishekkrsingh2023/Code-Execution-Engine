@@ -85,11 +85,12 @@ def extract_submission_data(job: str) -> dict:
     """
     Parse the JSON job string from the Redis queue.
 
-    Returns a dict with: submission_id, test_cases, time_limit, language, user_id, problem_id, problem_name.
+    Returns a dict with: submission_id, mode, test_cases, time_limit, language, user_id, problem_id, problem_name.
     """
     job_data = orjson.loads(job)
     return {
         "submission_id": job_data.get("submission_id"),
+        "mode": job_data.get("mode", "submit"),
         "language": job_data.get("language"),
         "test_cases": job_data.get("test_cases", []),
         "time_limit": job_data.get("time_limit", 2.0),
@@ -98,6 +99,7 @@ def extract_submission_data(job: str) -> dict:
         "problem_name": job_data.get("problem_name"),
         "user_code": job_data.get("user_code", ""),
     }
+
 
 
 def compile_and_run_code(submission_data: dict) -> dict:
@@ -208,13 +210,28 @@ def compile_and_run_code(submission_data: dict) -> dict:
                 if overall_status != JobStatus.TLE:
                     overall_status = JobStatus.FAILED
 
+        mode = submission_data.get("mode", "submit")
+        if mode == "submit":
+            sanitized_results = [
+                {
+                    "test_case": idx + 1,
+                    "status": r["status"],
+                    "weight": r.get("weight", 1.0),
+                    "score": r.get("score", 0.0),
+                }
+                for idx, r in enumerate(results)
+            ]
+            final_results = sanitized_results
+        else:
+            final_results = results
+
         total_time = time.perf_counter() - start_time
 
         return {
             "status": overall_status.value,
-            "output": "",
-            "error": "",
-            "results": orjson.dumps(results),
+            "output": "" if mode == "submit" else "\n".join(r.get("output", "") for r in results if r.get("output")),
+            "error": "" if mode == "submit" else "\n".join(r.get("error", "") for r in results if r.get("error")),
+            "results": orjson.dumps(final_results),
             "time_taken": round(total_time, 4),
             "score": round(score, 2),
             "max_score": max_score,
@@ -253,9 +270,10 @@ def process_jobs(client: redis.Redis) -> None:
         _, job = result
         data = extract_submission_data(job)
         submission_id = data["submission_id"]
+        mode = data.get("mode", "submit")
         submission_key = f"{SUBMISSION_KEY}{submission_id}"
 
-        log.info("Processing submission %s (lang=%s)", submission_id, data["language"])
+        log.info("Processing submission %s (mode=%s, lang=%s)", submission_id, mode, data["language"])
 
         # Mark the submission as running so pollers can distinguish
         # "waiting in queue" from "actively being judged"
@@ -279,29 +297,40 @@ def process_jobs(client: redis.Redis) -> None:
 
         # Persist results back to Redis
         client.hset(submission_key, mapping=results)
+        if mode == "submit":
+            client.hdel(submission_key, "test_cases")
 
         # Build payload matching the polling endpoint's response shape
         result_dict = client.hgetall(submission_key)
         if not result_dict:
             result_dict = {
                 "submission_id": submission_id,
+                "mode": mode,
                 "language": data.get("language"),
                 **results,
             }
+        if mode == "submit":
+            result_dict.pop("test_cases", None)
+
         payload = orjson.dumps(result_dict)
         client.set(f"result:{submission_id}", payload, ex=3600)  # durable copy, 1h TTL
         client.publish(f"result:{submission_id}", payload)  # live notification
 
-        # Synchronize score and submission record to PostgreSQL & update user leaderboard
-        try:
-            full_data = {**data, **results}
-            asyncio.run(record_submission_completion(submission_id, full_data))
+        # Synchronize score and submission record to PostgreSQL & update user leaderboard ONLY for submit mode
+        if mode == "submit":
+            try:
+                full_data = {**data, **results}
+                asyncio.run(record_submission_completion(submission_id, full_data))
+                log.info(
+                    "Persisted submission %s to PostgreSQL and updated user leaderboard score",
+                    submission_id,
+                )
+            except Exception as exc:
+                log.warning("Could not sync submission %s to database: %s", submission_id, exc)
+        else:
             log.info(
-                "Persisted submission %s to PostgreSQL and updated user leaderboard score",
-                submission_id,
+                "Submission %s in 'run' mode: marks and leaderboard NOT updated", submission_id
             )
-        except Exception as exc:
-            log.warning("Could not sync submission %s to database: %s", submission_id, exc)
 
         # Clean up the submission's source directory from disk
         submission_dir = CODE_BASE / submission_id
@@ -311,6 +340,7 @@ def process_jobs(client: redis.Redis) -> None:
             pass  # already removed — benign
         except Exception as e:
             log.error("Cleanup failed for %s: %s", submission_id, e)
+
 
         log.info(
             "Finished submission %s — status=%s, score=%s/%s",

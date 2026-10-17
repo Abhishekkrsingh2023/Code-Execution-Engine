@@ -359,3 +359,63 @@ class TestLeaderboardRoutes:
         lb_data = lb_res.json()
         assert lb_data["users"][0]["username"] == "alice"
         assert lb_data["users"][0]["total_score"] == 100.0
+
+    async def test_run_code_authenticated_and_poll_does_not_sync_leaderboard(
+        self,
+        async_client: AsyncClient,
+        redis_client,
+        db_session: AsyncSession,
+        sample_problem: Problem,
+        user_alice: User,
+    ) -> None:
+        """When an authenticated user runs code via /api-v1/code/run,
+        polling the completed result does NOT update user total score or problems_solved on the leaderboard."""
+        token = create_access_token(user_alice.id, user_alice.role)
+        sub_uuid = str(uuid.uuid4())
+
+        payload = {
+            "submission_id": sub_uuid,
+            "problem_id": str(sample_problem.id),
+            "problem_name": sample_problem.title,
+            "user_code": "def solve(): print('done')",
+            "language": "python",
+            "test_cases": [
+                {"input": "1\n", "expected_output": "1\n", "weight": 50.0},
+            ],
+            "time_limit": 2.0,
+        }
+
+        # 1. Run code with auth
+        res = await async_client.post(
+            "/api-v1/code/run",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res.status_code == 200
+        assert res.json()["mode"] == "run"
+
+        # Simulate worker finishing and setting verdict in Redis for run mode
+        sub_key = f"submission:{sub_uuid}"
+        await redis_client.hset(
+            sub_key,
+            mapping={
+                "status": "completed",
+                "score": 50.0,
+                "max_score": 50.0,
+                "tests_passed": 1,
+                "total_tests": 1,
+                "time_taken": 0.05,
+                "mode": "run",
+            },
+        )
+
+        # 2. Poll submission
+        poll_res = await async_client.get(f"/api-v1/code/submission/poll/{sub_uuid}")
+        assert poll_res.status_code == 200
+        assert poll_res.json()["mode"] == "run"
+
+        # 3. Verify user's leaderboard score is NOT modified!
+        await db_session.refresh(user_alice)
+        assert user_alice.total_score == 0.0
+        assert user_alice.problems_solved == 0
+
