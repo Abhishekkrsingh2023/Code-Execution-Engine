@@ -72,34 +72,58 @@ async def handle_list_admin_users(
     users_result = await db.execute(query_stmt)
     users = users_result.scalars().all()
 
-    admin_users: list[AdminUserResponse] = []
-    for u in users:
-        # Aggregated counts per user
-        sub_count_stmt = select(func.count(Submission.id)).where(Submission.user_id == u.id)
-        sub_count = (await db.execute(sub_count_stmt)).scalar_one()
+    if not users:
+        return AdminUserListResponse(total=total, skip=skip, limit=limit, users=[])
 
-        prob_count_stmt = select(func.count(Problem.id)).where(
-            Problem.created_by == u.id, Problem.is_deleted.is_(False)
-        )
-        prob_count = (await db.execute(prob_count_stmt)).scalar_one()
+    user_ids = [u.id for u in users]
 
-        admin_users.append(
-            AdminUserResponse(
-                id=u.id,
-                username=u.username,
-                email=u.email,
-                role=u.role,
-                status=u.status,
-                is_email_verified=u.is_email_verified,
-                is_protected=u.is_protected,
-                has_password=u.has_password,
-                created_at=u.created_at,
-                total_score=getattr(u, "total_score", 0.0) or 0.0,
-                problems_solved=getattr(u, "problems_solved", 0) or 0,
-                submissions_count=sub_count,
-                problems_created_count=prob_count,
-            )
+    # Batch fetch submission counts for all users in one query (avoids N+1)
+    sub_counts_stmt = (
+        select(
+            Submission.user_id,
+            func.count(Submission.id).label("sub_count"),
         )
+        .where(Submission.user_id.in_(user_ids))
+        .group_by(Submission.user_id)
+    )
+    sub_count_map: dict[Any, int] = {
+        row.user_id: row.sub_count for row in (await db.execute(sub_counts_stmt)).all()
+    }
+
+    # Batch fetch problem-created counts for all users in one query (avoids N+1)
+    prob_counts_stmt = (
+        select(
+            Problem.created_by,
+            func.count(Problem.id).label("prob_count"),
+        )
+        .where(
+            Problem.created_by.in_(user_ids),
+            Problem.is_deleted.is_(False),
+        )
+        .group_by(Problem.created_by)
+    )
+    prob_count_map: dict[Any, int] = {
+        row.created_by: row.prob_count for row in (await db.execute(prob_counts_stmt)).all()
+    }
+
+    admin_users: list[AdminUserResponse] = [
+        AdminUserResponse(
+            id=u.id,
+            username=u.username,
+            email=u.email,
+            role=u.role,
+            status=u.status,
+            is_email_verified=u.is_email_verified,
+            is_protected=u.is_protected,
+            has_password=u.has_password,
+            created_at=u.created_at,
+            total_score=getattr(u, "total_score", 0.0) or 0.0,
+            problems_solved=getattr(u, "problems_solved", 0) or 0,
+            submissions_count=sub_count_map.get(u.id, 0),
+            problems_created_count=prob_count_map.get(u.id, 0),
+        )
+        for u in users
+    ]
 
     return AdminUserListResponse(
         total=total,

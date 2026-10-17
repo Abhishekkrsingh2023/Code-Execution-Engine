@@ -143,5 +143,3 @@ class Problem(Base):
     def problem_id(self) -> int | None:
         """Alias for id to ensure consistency across problem references."""
         return self.id
-
-

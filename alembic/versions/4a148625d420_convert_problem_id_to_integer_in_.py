@@ -5,17 +5,18 @@ Revises: b020ce789568
 Create Date: 2026-10-17 12:02:05.954186
 
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '4a148625d420'
-down_revision: Union[str, Sequence[str], None] = 'b020ce789568'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "4a148625d420"
+down_revision: str | Sequence[str] | None = "b020ce789568"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -74,4 +75,3 @@ def downgrade() -> None:
         ["problem_id"],
         ondelete="CASCADE",
     )
-

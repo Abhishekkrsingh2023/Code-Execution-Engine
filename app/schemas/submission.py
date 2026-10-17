@@ -25,7 +25,6 @@ class TestCase(BaseModel):
     )
 
 
-
 class ExecutionMode(str, Enum):
     run = "run"
     submit = "submit"
@@ -91,4 +90,3 @@ class SubmitRequest(SubmissionRequest):
         default=ExecutionMode.submit,
         description="Execution mode for submit (defaults to 'submit').",
     )
-

@@ -17,6 +17,7 @@ PATH = pathlib.Path(__file__).parent.parent.resolve()
 if str(PATH) not in sys.path:
     sys.path.insert(0, str(PATH))
 
+from app.config import settings  # noqa: E402
 from app.services.leaderboard_service import record_submission_completion  # noqa: E402
 
 logging.basicConfig(
@@ -50,7 +51,6 @@ DOCKER_IMAGE = {
 }
 
 # Host-side base directory; the worker appends /{submission_id} when mounting
-PATH = pathlib.Path(__file__).parent.parent.resolve()
 CODE_BASE = PATH / "app" / "code"
 
 # How long to try reconnecting to Redis before giving up (seconds)
@@ -64,13 +64,13 @@ def _make_redis_client() -> redis.Redis:
     """
     Create a Redis client with sane timeouts and keepalive.
 
-    ``socket_timeout=None`` (the original default) would stall the worker
-    forever if Redis becomes unresponsive.  We set an explicit timeout and
-    rely on the reconnect loop in ``main()`` to re-establish the connection.
+    Uses host/port from app.config.settings so the worker respects the same
+    environment variables as the FastAPI application. Previously this was
+    hardcoded to localhost:6379 which broke Docker Compose / Kubernetes setups.
     """
     return redis.Redis(
-        host="localhost",
-        port=6379,
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
         decode_responses=True,
         socket_timeout=30,  # raise after 30 s of silence
         socket_connect_timeout=10,  # fail fast on initial connect
@@ -99,7 +99,6 @@ def extract_submission_data(job: str) -> dict:
         "problem_name": job_data.get("problem_name"),
         "user_code": job_data.get("user_code", ""),
     }
-
 
 
 def compile_and_run_code(submission_data: dict) -> dict:
@@ -229,8 +228,12 @@ def compile_and_run_code(submission_data: dict) -> dict:
 
         return {
             "status": overall_status.value,
-            "output": "" if mode == "submit" else "\n".join(r.get("output", "") for r in results if r.get("output")),
-            "error": "" if mode == "submit" else "\n".join(r.get("error", "") for r in results if r.get("error")),
+            "output": ""
+            if mode == "submit"
+            else "\n".join(r.get("output", "") for r in results if r.get("output")),
+            "error": ""
+            if mode == "submit"
+            else "\n".join(r.get("error", "") for r in results if r.get("error")),
             "results": orjson.dumps(final_results),
             "time_taken": round(total_time, 4),
             "score": round(score, 2),
@@ -273,7 +276,9 @@ def process_jobs(client: redis.Redis) -> None:
         mode = data.get("mode", "submit")
         submission_key = f"{SUBMISSION_KEY}{submission_id}"
 
-        log.info("Processing submission %s (mode=%s, lang=%s)", submission_id, mode, data["language"])
+        log.info(
+            "Processing submission %s (mode=%s, lang=%s)", submission_id, mode, data["language"]
+        )
 
         # Mark the submission as running so pollers can distinguish
         # "waiting in queue" from "actively being judged"
@@ -340,7 +345,6 @@ def process_jobs(client: redis.Redis) -> None:
             pass  # already removed — benign
         except Exception as e:
             log.error("Cleanup failed for %s: %s", submission_id, e)
-
 
         log.info(
             "Finished submission %s — status=%s, score=%s/%s",

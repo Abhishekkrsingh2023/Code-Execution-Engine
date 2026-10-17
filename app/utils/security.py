@@ -2,6 +2,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
+from loguru import logger
 
 
 def hash_password(password: str) -> str:
@@ -37,7 +38,10 @@ def verify_password(plain_password: str, hashed_password: str | None) -> bool:
             plain_password.encode("utf-8"),
             hashed_password.encode("utf-8"),
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "verify_password raised an unexpected exception (possible hash corruption?): {}", exc
+        )
         return False
 
 

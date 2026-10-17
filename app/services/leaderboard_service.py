@@ -26,7 +26,9 @@ async def resolve_problem_id(problem_id_val: int | str | None, db: AsyncSession)
             return found
 
     # Fallback to title matching
-    stmt_title = select(Problem.id).where(Problem.title.ilike(cleaned), Problem.is_deleted.is_(False))
+    stmt_title = select(Problem.id).where(
+        Problem.title.ilike(cleaned), Problem.is_deleted.is_(False)
+    )
     return (await db.execute(stmt_title)).scalars().first()
 
 
@@ -266,25 +268,37 @@ async def get_leaderboard_data(
 
     users = (await db.execute(query_stmt)).scalars().all()
 
-    leaderboard: list[dict[str, Any]] = []
-    for idx, u in enumerate(users):
-        rank = skip + idx + 1
-        # Submissions count for this user
-        sub_count_stmt = select(func.count(Submission.id)).where(Submission.user_id == u.id)
-        sub_count = (await db.execute(sub_count_stmt)).scalar_one()
+    if not users:
+        return total, []
 
-        leaderboard.append(
-            {
-                "rank": rank,
-                "user_id": str(u.id),
-                "username": u.username,
-                "total_score": u.total_score,
-                "problems_solved": u.problems_solved,
-                "submissions_count": sub_count,
-                "role": u.role.value if hasattr(u.role, "value") else str(u.role),
-                "created_at": u.created_at.isoformat() if u.created_at else None,
-            }
+    user_ids = [u.id for u in users]
+
+    # Batch fetch submission counts for all leaderboard users in one query (avoids N+1)
+    sub_counts_stmt = (
+        select(
+            Submission.user_id,
+            func.count(Submission.id).label("sub_count"),
         )
+        .where(Submission.user_id.in_(user_ids))
+        .group_by(Submission.user_id)
+    )
+    sub_count_map: dict[Any, int] = {
+        row.user_id: row.sub_count for row in (await db.execute(sub_counts_stmt)).all()
+    }
+
+    leaderboard: list[dict[str, Any]] = [
+        {
+            "rank": skip + idx + 1,
+            "user_id": str(u.id),
+            "username": u.username,
+            "total_score": u.total_score,
+            "problems_solved": u.problems_solved,
+            "submissions_count": sub_count_map.get(u.id, 0),
+            "role": u.role.value if hasattr(u.role, "value") else str(u.role),
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for idx, u in enumerate(users)
+    ]
 
     return total, leaderboard
 

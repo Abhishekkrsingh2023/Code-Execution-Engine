@@ -3,7 +3,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 from app.models.problem import ProblemDifficulty, ProblemStatus
 
 
@@ -290,4 +289,3 @@ class FullProblemResponse(BaseModel):
     test_cases_count: int = Field(default=0, description="Total test cases in database.")
 
     model_config = ConfigDict(from_attributes=True)
-
