@@ -61,7 +61,7 @@ def setup_logging(
         level=level,
         format=LOG_FORMAT,
         encoding="utf-8",
-        enqueue=True,  # Asynchronous thread-safe non-blocking I/O
+        enqueue=False,  # Thread-safe write without multiprocessing semaphore leaks
     )
     _worker_sink_id = sink_id
     return sink_id

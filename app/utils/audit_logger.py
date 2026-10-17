@@ -84,7 +84,7 @@ def setup_audit_logger(
         retention=ret,
         level=level,
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {extra[audit_action]} | {message}",
-        enqueue=True,  # offload disk I/O to background thread — never block the async event loop
+        enqueue=False,  # Thread-safe synchronous write avoiding multiprocessing semaphore leaks on reloads
     )
     _audit_sink_id = sink_id
     return sink_id
