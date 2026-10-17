@@ -84,7 +84,7 @@ def setup_audit_logger(
         retention=ret,
         level=level,
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {extra[audit_action]} | {message}",
-        enqueue=False,
+        enqueue=True,  # offload disk I/O to background thread — never block the async event loop
     )
     _audit_sink_id = sink_id
     return sink_id
@@ -158,23 +158,16 @@ async def log_audit_event(
         ip_address=ip_address,
     )
 
+    # Always persist in an independent session so we never call commit() on the
+    # caller's active business transaction (which would prematurely flush it and
+    # make a subsequent rollback a no-op). The db parameter is intentionally
+    # ignored for persistence; it is kept in the signature for backward compat.
     if db is not None:
-        try:
-            db.add(audit_entry)
-            await db.commit()
-            await db.refresh(audit_entry)
-            return audit_entry
-        except Exception as exc:
-            logger.warning(
-                "Failed to persist audit log using active session: {}. Retrying with fresh session.",
-                exc,
-            )
-            try:
-                await db.rollback()
-            except Exception:
-                pass
+        logger.debug(
+            "audit_logger: ignoring caller's db session to avoid double-commit; "
+            "persisting audit entry in a fresh session instead."
+        )
 
-    # Fallback to independent session to ensure failure entries are always saved
     async with SessionLocal() as fresh_db:
         fresh_db.add(audit_entry)
         await fresh_db.commit()

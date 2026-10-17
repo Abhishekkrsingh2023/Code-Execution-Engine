@@ -143,7 +143,6 @@ async def get_common_template(
     return await handle_get_common_template(problem_id=problem_id, db=db)
 
 
-
 @router.post(
     "/templates/common",
     response_model=CommonProblemTemplateResponse,

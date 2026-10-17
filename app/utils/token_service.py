@@ -150,8 +150,13 @@ async def is_refresh_token_active(
     try:
         return bool(await r.exists(_active_token_key(user_id_str, jti)))
     except Exception as exc:
-        logger.error("Error checking active token in Redis for jti={}: {}", jti, exc)
-        return True  # Graceful fallback if Redis fails momentarily
+        logger.error(
+            "Error checking active token in Redis for jti={}: {}. "
+            "Failing closed: treating token as inactive to prevent revoked-token replay during outage.",
+            jti,
+            exc,
+        )
+        return False  # Fail closed: require re-login when Redis is unavailable
 
 
 async def revoke_all_user_refresh_tokens(

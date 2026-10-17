@@ -206,7 +206,6 @@ class TestCodeSubmitRoute:
 
         assert response.status_code == 422
 
-
     async def test_submit_code_failure_cleans_up_directory_and_raises_500(
         self,
         async_client: AsyncClient,
@@ -654,5 +653,3 @@ class TestRunVsSubmitDistinction:
         data = response.json()
         assert data["mode"] == "run"
         assert data["status"] == "queued"
-
-

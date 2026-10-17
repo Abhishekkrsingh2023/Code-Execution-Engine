@@ -418,4 +418,3 @@ class TestLeaderboardRoutes:
         await db_session.refresh(user_alice)
         assert user_alice.total_score == 0.0
         assert user_alice.problems_solved == 0
-

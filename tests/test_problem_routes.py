@@ -334,4 +334,3 @@ class TestPublicProblemListingAndFiltering:
         assert tmpl_res.status_code == 200
         tmpls = tmpl_res.json()
         assert any(t["problem_id"] == 2 for t in tmpls)
-

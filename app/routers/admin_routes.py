@@ -42,7 +42,10 @@ from app.schemas.user import MessageResponse
 router = APIRouter(
     prefix="/api-v1/admin",
     tags=["admin"],
-    dependencies=[Depends(require_admin)],
+    # NOTE: require_admin is intentionally NOT added here as a router-level dependency.
+    # Every handler that needs admin access already declares:
+    #   current_admin: User = Depends(require_admin)
+    # Adding it both here and per-handler runs the dependency (and the DB query) twice per request.
 )
 
 
@@ -204,19 +207,8 @@ async def get_dashboard_stats(
     return await handle_get_dashboard_stats(days=days, db=db)
 
 
-@router.get(
-    "/stats/dashboard",
-    response_model=DashboardStatsResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get comprehensive system statistics dashboard (alias)",
-)
-async def get_dashboard_stats_alias(
-    days: int = Query(default=30, ge=1, le=365, description="Time window for trends in days."),
-    db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(require_admin),
-) -> DashboardStatsResponse:
-    """Alias for dashboard statistics."""
-    return await handle_get_dashboard_stats(days=days, db=db)
+# NOTE: /stats/dashboard alias removed (MED-2). Use GET /stats directly.
+# It was identical to /stats and caused double maintenance and OpenAPI schema confusion.
 
 
 @router.get(

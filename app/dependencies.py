@@ -12,21 +12,20 @@ from app.utils.jwt import verify_access_token
 
 async def get_current_user(
     request: Request,
-    authorization: str | None = Header(None, description="Bearer token or user ID"),
-    x_user_id: str | None = Header(None, alias="X-User-Id", description="User UUID primary key"),
+    authorization: str | None = Header(None, description="Bearer JWT access token"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Dependency to extract and validate the authenticated user from request cookies or headers.
 
     Extraction Priority:
     1. HTTP-Only Cookie: access_token
-    2. Header: Authorization: Bearer <jwt_access_token | user_uuid>
-    3. Header: X-User-Id: <user_uuid>
+    2. Header: Authorization: Bearer <jwt_access_token>
 
     Token Validation:
     - Decodes and validates JWT signature, expiration, and claims.
     - Strictly enforces token type == 'access'. Never accepts a refresh token.
-    - Preserves backwards compatibility for raw UUID identifiers in headers.
+    - Raw UUID header authentication has been removed (HIGH-5): it bypassed token
+      expiry, revocation, and rotation entirely.
 
     Raises:
     - 401 UNAUTHORIZED if missing, expired, invalid, or user not found.
@@ -47,10 +46,6 @@ async def get_current_user(
         elif len(parts) == 1:
             token = parts[0]
 
-    # 3. Check X-User-Id fallback header
-    if not token and x_user_id:
-        token = x_user_id.strip()
-
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -58,29 +53,17 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user_uuid: uuid.UUID
-    # Determine if token is a JWT (typically 3 dot-separated base64 segments)
-    if token.count(".") == 2:
-        payload = verify_access_token(token)
-        sub = payload.get("sub")
-        try:
-            user_uuid = uuid.UUID(sub)
-        except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user identifier claim in token.",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from None
-    else:
-        # Fallback to direct UUID parsing for legacy header authentication
-        try:
-            user_uuid = uuid.UUID(token)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token format.",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from None
+    # Validate token — JWT only; raw-UUID header auth removed (security: no expiry/revocation)
+    payload = verify_access_token(token)
+    sub = payload.get("sub")
+    try:
+        user_uuid = uuid.UUID(sub)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user identifier claim in token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
 
     stmt = select(User).where(User.id == user_uuid)
     result = await db.execute(stmt)
@@ -134,8 +117,7 @@ async def require_moderator_or_admin(
 
 async def get_current_user_optional(
     request: Request,
-    authorization: str | None = Header(None, description="Bearer token or user ID"),
-    x_user_id: str | None = Header(None, alias="X-User-Id", description="User UUID primary key"),
+    authorization: str | None = Header(None, description="Bearer JWT access token"),
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
     """Dependency that extracts current user if authenticated, or None if anonymous/unauthenticated."""
@@ -143,7 +125,6 @@ async def get_current_user_optional(
         return await get_current_user(
             request=request,
             authorization=authorization,
-            x_user_id=x_user_id,
             db=db,
         )
     except HTTPException:

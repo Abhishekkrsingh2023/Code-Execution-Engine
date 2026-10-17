@@ -62,14 +62,19 @@ async def load_problem_test_cases(
     code_id = problem.id if problem else (int(cleaned) if cleaned.isdigit() else None)
     common_tmpl = None
     if code_id is not None:
-        stmt_common = select(CommonProblemTemplate).where(CommonProblemTemplate.problem_id == code_id)
+        stmt_common = select(CommonProblemTemplate).where(
+            CommonProblemTemplate.problem_id == code_id
+        )
         common_tmpl = (await db.execute(stmt_common)).scalar_one_or_none()
 
     if not common_tmpl and problem:
-        stmt_common_desc = select(CommonProblemTemplate).where(
-            CommonProblemTemplate.problem_statement == problem.description
+        # NOTE: Description-based matching (problem_statement == problem.description) has been
+        # intentionally removed. It caused: (1) wrong test cases if descriptions were similar,
+        # and (2) a full-table seq scan on every submit. Enforce FK integrity via problem_id instead.
+        logger.warning(
+            "CommonProblemTemplate not found for problem_id={}. No fuzzy fallback will be attempted.",
+            code_id,
         )
-        common_tmpl = (await db.execute(stmt_common_desc)).scalar_one_or_none()
 
     raw_cases: list[dict] = []
     if mode == "submit":
@@ -142,7 +147,9 @@ async def load_problem_test_cases(
         )
         for rc in raw_cases
     ]
-    time_limit = problem.time_limit if problem else (common_tmpl.time_limit if common_tmpl else None)
+    time_limit = (
+        problem.time_limit if problem else (common_tmpl.time_limit if common_tmpl else None)
+    )
     problem_name = problem.title if problem else None
     return test_cases, time_limit, problem_name
 
@@ -286,7 +293,9 @@ async def handle_code_execution_request(
         raise HTTPException(status_code=500, detail="Failed to enqueue submission") from exc
 
     return {
-        "message": "Submission received successfully." if mode == "submit" else "Run request received successfully.",
+        "message": "Submission received successfully."
+        if mode == "submit"
+        else "Run request received successfully.",
         "submission": submission.submission_id,
         "status": "queued",
         "mode": mode,
@@ -300,10 +309,14 @@ async def handle_submit_code_request(
     current_user: User | None = None,
     db: AsyncSession | None = None,
 ) -> dict[str, Any]:
-    mode_str = submission.mode.value if hasattr(submission.mode, "value") else str(submission.mode)
+    """Entry point for the /submit endpoint.
+
+    Always forces mode='submit' regardless of what the incoming schema says,
+    preventing clients from bypassing leaderboard updates by injecting mode='run'.
+    """
     return await handle_code_execution_request(
         submission=submission,
-        mode=mode_str or "submit",
+        mode="submit",  # hardcoded — never trust client-supplied mode on submit endpoint
         current_user=current_user,
         db=db,
     )
@@ -377,7 +390,7 @@ async def handle_poll_submission(
         try:
             await record_submission_completion(submission_id, submission_data, db=db)
         except Exception as exc:
-            logger.debug("DB sync on poll: {}", exc)
+            logger.warning("DB sync on poll failed for submission {}: {}", submission_id, exc)
 
     # For submit mode: never expose raw internal test cases in polling output
     if mode == "submit":
@@ -386,4 +399,3 @@ async def handle_poll_submission(
         return clean_data
 
     return submission_data
-

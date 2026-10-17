@@ -1,3 +1,6 @@
+import warnings
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +25,9 @@ class Settings(BaseSettings):
     LOG_ROTATION: str = "10 MB"
     LOG_RETENTION: str = "30 days"
 
+    # Application environment — set ENVIRONMENT=production in .env for production deployments
+    ENVIRONMENT: str = "development"
+
     # JWT Authentication
     JWT_SECRET_KEY: str = "temporary-secret-key-change-in-production-code-buddy"
     JWT_ALGORITHM: str = "HS256"
@@ -31,7 +37,9 @@ class Settings(BaseSettings):
     # Cookie Authentication Settings
     ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
     REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
-    COOKIE_SECURE: bool = False
+    COOKIE_SECURE: bool = (
+        True  # Always True by default; override to False only in .env for local dev
+    )
     COOKIE_HTTPONLY: bool = True
     COOKIE_SAMESITE: str = "lax"
     COOKIE_PATH: str = "/"
@@ -46,6 +54,35 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> "Settings":
+        """Refuse to start with the default JWT secret outside of development.
+
+        In production (ENVIRONMENT != 'development') this raises immediately so
+        the service never boots with a publicly-known signing key.
+        In development a warning is emitted instead so local setups keep working.
+        """
+        _DEFAULT_SECRET = "temporary-secret-key-change-in-production-code-buddy"
+        if self.JWT_SECRET_KEY == _DEFAULT_SECRET:
+            if self.ENVIRONMENT.lower() == "development":
+                warnings.warn(
+                    "JWT_SECRET_KEY is set to the insecure default value. "
+                    "Set a strong secret in your .env file before deploying to production.",
+                    stacklevel=2,
+                )
+            else:
+                raise ValueError(
+                    "JWT_SECRET_KEY must be overridden in production. "
+                    'Generate a strong secret with: python -c "import secrets; print(secrets.token_hex(32))"'
+                )
+        if self.ENVIRONMENT.lower() != "development" and not self.COOKIE_SECURE:
+            warnings.warn(
+                "COOKIE_SECURE is False in a non-development environment. "
+                "Auth cookies will be transmitted over plain HTTP.",
+                stacklevel=2,
+            )
+        return self
 
 
 settings = Settings()

@@ -14,7 +14,7 @@ from app.controllers.code_controller import (
 from app.database import get_db
 from app.dependencies import get_current_user_optional
 from app.models.user import User
-from app.schemas.submission import RunRequest, SubmissionRequest, SubmitRequest
+from app.schemas.submission import RunRequest, SubmitRequest
 
 router = APIRouter(prefix="/api-v1/code", tags=["code"])
 
@@ -34,7 +34,9 @@ async def run_code_request(
     return await handle_run_code_request(submission, current_user=current_user, db=db)
 
 
-@router.post("/submit", summary="Submit code for evaluation against internal test cases (updates marks)")
+@router.post(
+    "/submit", summary="Submit code for evaluation against internal test cases (updates marks)"
+)
 @router.post("/submit-code")
 async def submit_code_request(
     submission: SubmitRequest,
@@ -50,11 +52,9 @@ async def submit_code_request(
     return await handle_submit_code_request(submission, current_user=current_user, db=db)
 
 
-
 @router.get("/stream/{submission_id}")
 async def stream_submission(
     submission_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Stream code submission results.
     This endpoint allows clients to stream the results of a code submission by its unique identifier. It retrieves the submission data from Redis and returns a streaming response to the client.
@@ -69,7 +69,7 @@ async def stream_submission(
 
 @router.get("/submission/poll/{submission_id}")
 async def poll_submission(
-    submission_id: str,
+    submission_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Poll code submission status.
@@ -83,4 +83,4 @@ async def poll_submission(
     Raises:
         HTTPException: If the submission is not found in Redis, a 404 error is raised
     """
-    return await handle_poll_submission(submission_id, db=db)
+    return await handle_poll_submission(str(submission_id), db=db)

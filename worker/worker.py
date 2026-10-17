@@ -17,6 +17,7 @@ PATH = pathlib.Path(__file__).parent.parent.resolve()
 if str(PATH) not in sys.path:
     sys.path.insert(0, str(PATH))
 
+from app.config import settings  # noqa: E402
 from app.services.leaderboard_service import record_submission_completion  # noqa: E402
 
 logging.basicConfig(
@@ -50,7 +51,6 @@ DOCKER_IMAGE = {
 }
 
 # Host-side base directory; the worker appends /{submission_id} when mounting
-PATH = pathlib.Path(__file__).parent.parent.resolve()
 CODE_BASE = PATH / "app" / "code"
 
 # How long to try reconnecting to Redis before giving up (seconds)
@@ -64,13 +64,13 @@ def _make_redis_client() -> redis.Redis:
     """
     Create a Redis client with sane timeouts and keepalive.
 
-    ``socket_timeout=None`` (the original default) would stall the worker
-    forever if Redis becomes unresponsive.  We set an explicit timeout and
-    rely on the reconnect loop in ``main()`` to re-establish the connection.
+    Uses host/port from app.config.settings so the worker respects the same
+    environment variables as the FastAPI application. Previously this was
+    hardcoded to localhost:6379 which broke Docker Compose / Kubernetes setups.
     """
     return redis.Redis(
-        host="localhost",
-        port=6379,
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
         decode_responses=True,
         socket_timeout=30,  # raise after 30 s of silence
         socket_connect_timeout=10,  # fail fast on initial connect
@@ -99,7 +99,6 @@ def extract_submission_data(job: str) -> dict:
         "problem_name": job_data.get("problem_name"),
         "user_code": job_data.get("user_code", ""),
     }
-
 
 
 def compile_and_run_code(submission_data: dict) -> dict:
@@ -229,8 +228,12 @@ def compile_and_run_code(submission_data: dict) -> dict:
 
         return {
             "status": overall_status.value,
-            "output": "" if mode == "submit" else "\n".join(r.get("output", "") for r in results if r.get("output")),
-            "error": "" if mode == "submit" else "\n".join(r.get("error", "") for r in results if r.get("error")),
+            "output": ""
+            if mode == "submit"
+            else "\n".join(r.get("output", "") for r in results if r.get("output")),
+            "error": ""
+            if mode == "submit"
+            else "\n".join(r.get("error", "") for r in results if r.get("error")),
             "results": orjson.dumps(final_results),
             "time_taken": round(total_time, 4),
             "score": round(score, 2),
@@ -251,11 +254,18 @@ def compile_and_run_code(submission_data: dict) -> dict:
 # ── Main processing loop ─────────────────────────────────────────────────────
 
 
-def process_jobs(client: redis.Redis) -> None:
+def process_jobs(client: redis.Redis, loop: asyncio.AbstractEventLoop) -> None:
     """
     Inner loop: dequeue jobs and process them until a Redis error occurs.
     Separated from ``main()`` so the reconnect wrapper in ``main()`` can
     cleanly restart it without restarting the whole process.
+
+    ``loop`` is the single persistent event loop for the entire process lifetime.
+    We call ``loop.run_until_complete()`` instead of ``asyncio.run()`` so that
+    SQLAlchemy's async engine — which captures the running loop on first use —
+    is always bound to the same loop.  ``asyncio.run()`` creates a *new* loop for
+    every call and tears it down immediately afterwards, which causes
+    ``RuntimeError: Task attached to a different loop`` on the second submission.
     """
     log.info("Worker ready — waiting for jobs on '%s'", QUEUE_NAME)
 
@@ -273,7 +283,9 @@ def process_jobs(client: redis.Redis) -> None:
         mode = data.get("mode", "submit")
         submission_key = f"{SUBMISSION_KEY}{submission_id}"
 
-        log.info("Processing submission %s (mode=%s, lang=%s)", submission_id, mode, data["language"])
+        log.info(
+            "Processing submission %s (mode=%s, lang=%s)", submission_id, mode, data["language"]
+        )
 
         # Mark the submission as running so pollers can distinguish
         # "waiting in queue" from "actively being judged"
@@ -320,7 +332,7 @@ def process_jobs(client: redis.Redis) -> None:
         if mode == "submit":
             try:
                 full_data = {**data, **results}
-                asyncio.run(record_submission_completion(submission_id, full_data))
+                loop.run_until_complete(record_submission_completion(submission_id, full_data))
                 log.info(
                     "Persisted submission %s to PostgreSQL and updated user leaderboard score",
                     submission_id,
@@ -341,7 +353,6 @@ def process_jobs(client: redis.Redis) -> None:
         except Exception as e:
             log.error("Cleanup failed for %s: %s", submission_id, e)
 
-
         log.info(
             "Finished submission %s — status=%s, score=%s/%s",
             submission_id,
@@ -355,21 +366,38 @@ def main() -> None:
     """
     Outer loop: connect to Redis and start processing jobs.
     Reconnects automatically if the connection is lost.
+
+    A single asyncio event loop is created here and reused for the entire
+    process lifetime.  This is intentional: SQLAlchemy's async engine binds
+    itself to the first event loop it encounters; reusing the same one avoids
+    cross-loop ``RuntimeError``s that would occur if we called ``asyncio.run()``
+    (which creates and immediately destroys a new loop) for every submission.
     """
-    while True:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        while True:
+            try:
+                client = _make_redis_client()
+                client.ping()  # fail fast if Redis is not reachable at startup
+                process_jobs(client, loop)
+            except redis.ConnectionError as e:
+                log.error(
+                    "Redis connection lost: %s — reconnecting in %ds…", e, REDIS_RECONNECT_DELAY
+                )
+                time.sleep(REDIS_RECONNECT_DELAY)
+            except redis.TimeoutError as e:
+                log.error("Redis timeout: %s — reconnecting in %ds…", e, REDIS_RECONNECT_DELAY)
+                time.sleep(REDIS_RECONNECT_DELAY)
+            except KeyboardInterrupt:
+                log.info("Worker shutting down.")
+                break
+    finally:
+        # Cleanly drain pending callbacks and close the loop on exit
         try:
-            client = _make_redis_client()
-            client.ping()  # fail fast if Redis is not reachable at startup
-            process_jobs(client)
-        except redis.ConnectionError as e:
-            log.error("Redis connection lost: %s — reconnecting in %ds…", e, REDIS_RECONNECT_DELAY)
-            time.sleep(REDIS_RECONNECT_DELAY)
-        except redis.TimeoutError as e:
-            log.error("Redis timeout: %s — reconnecting in %ds…", e, REDIS_RECONNECT_DELAY)
-            time.sleep(REDIS_RECONNECT_DELAY)
-        except KeyboardInterrupt:
-            log.info("Worker shutting down.")
-            break
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            loop.close()
 
 
 if __name__ == "__main__":
