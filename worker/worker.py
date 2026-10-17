@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import pathlib
 import shutil
 import sys
@@ -17,15 +16,17 @@ PATH = pathlib.Path(__file__).parent.parent.resolve()
 if str(PATH) not in sys.path:
     sys.path.insert(0, str(PATH))
 
+try:
+    from worker.logs.logger import logger as log
+    from worker.logs.logger import setup_logging
+except ImportError:
+    from logs.logger import logger as log
+    from logs.logger import setup_logging
+
+setup_logging()
+
 from app.config import settings  # noqa: E402
 from app.services.leaderboard_service import record_submission_completion  # noqa: E402
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-log = logging.getLogger(__name__)
-
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
