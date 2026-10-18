@@ -317,7 +317,7 @@ class TestPublicProblemListingAndFiltering:
         assert data["problem"]["title"] == "Valid Palindrome"
         assert data["problem_code"] == 2
         assert len(data["run_test_cases"]) == 2
-        assert len(data["submit_test_cases"]) == 2
+        assert "submit_test_cases" not in data
         assert len(data["templates"]) == 2
         assert (
             data["templates"][0]["boilerplate_code"]
@@ -332,7 +332,8 @@ class TestPublicProblemListingAndFiltering:
         get_data = get_res.json()
         assert get_data["problem"]["id"] == problem_id
         assert len(get_data["run_test_cases"]) == 2
-        assert len(get_data["submit_test_cases"]) == 2
+        assert "submit_test_cases" not in get_data
+        assert get_data["run_test_cases"][0]["input"] == "race a car"
         assert len(get_data["templates"]) == 2
         assert get_data["templates"][0]["boilerplate_code"] is not None
 

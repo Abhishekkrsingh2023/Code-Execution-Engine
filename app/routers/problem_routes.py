@@ -188,7 +188,7 @@ async def get_full_problem(
     problem_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> FullProblemResponse:
-    """Retrieves complete problem definition including run/submit test cases and templates."""
+    """Retrieves complete problem definition including run test cases and templates."""
     return await handle_get_full_problem(problem_id=problem_id, db=db)
 
 

@@ -553,7 +553,6 @@ async def handle_create_full_problem(
             problem_code=code_id,
             problem_id=code_id,
             run_test_cases=payload.run_test_cases,
-            submit_test_cases=payload.submit_test_cases,
             templates=[ProblemTemplateResponse.model_validate(t) for t in created_templates],
             test_cases_count=len(payload.run_test_cases) + len(payload.submit_test_cases),
         )
@@ -608,33 +607,42 @@ async def handle_get_full_problem(
     common_tmpl = (await db.execute(stmt_common)).scalars().first()
 
     run_tcs: list[dict] = []
-    submit_tcs: list[dict] = []
     templates: list[ProblemTemplateResponse] = []
 
     if common_tmpl:
         code_id = common_tmpl.problem_id
         run_tcs = list(common_tmpl.run_test_cases or [])
-        submit_tcs = list(common_tmpl.submit_test_cases or [])
         templates = [
             ProblemTemplateResponse.model_validate(t) for t in (common_tmpl.templates or [])
         ]
-    else:
-        # Fallback to test_cases table
-        for tc in problem.test_cases:
-            item = {"input": tc.input, "expected_output": tc.expected_output, "weight": tc.weight}
-            if tc.is_sample:
-                run_tcs.append(item)
-            else:
-                submit_tcs.append(item)
+
+    # If common template didn't have run test cases, fall back to sample test cases from DB
+    if not run_tcs and problem.test_cases:
+        sample_cases = [tc for tc in problem.test_cases if tc.is_sample]
+        selected_cases = sample_cases if sample_cases else list(problem.test_cases)
+        run_tcs = [
+            {
+                "id": tc.id,
+                "input": tc.input,
+                "expected_output": tc.expected_output,
+                "weight": tc.weight,
+            }
+            for tc in selected_cases
+        ]
+
+    total_count = len(problem.test_cases)
+    if total_count == 0 and common_tmpl:
+        total_count = len(common_tmpl.run_test_cases or []) + len(
+            common_tmpl.submit_test_cases or []
+        )
 
     return FullProblemResponse(
         problem=ProblemResponse.model_validate(problem),
         problem_code=code_id,
         problem_id=code_id,
         run_test_cases=run_tcs,
-        submit_test_cases=submit_tcs,
         templates=templates,
-        test_cases_count=len(problem.test_cases),
+        test_cases_count=total_count,
     )
 
 

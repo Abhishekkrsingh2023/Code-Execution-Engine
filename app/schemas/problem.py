@@ -282,7 +282,6 @@ class FullProblemResponse(BaseModel):
     problem_code: int = Field(..., description="Integer problem ID in template system.")
     problem_id: int | None = Field(None, description="Integer problem ID in template system.")
     run_test_cases: list[dict] = Field(default_factory=list, description="Run test cases.")
-    submit_test_cases: list[dict] = Field(default_factory=list, description="Submit test cases.")
     templates: list[ProblemTemplateResponse] = Field(
         default_factory=list, description="Language problem templates."
     )

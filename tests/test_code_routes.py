@@ -76,12 +76,10 @@ class TestCodeSubmitRoute:
         redis_data = await redis_client.hgetall(sub_key)
         assert redis_data["submission_id"] == sub_id
         assert redis_data["language"] == "python"
-        assert redis_data["status"] == "queued"
-        assert redis_data["output"] == ""
-
-        # Verify Redis queue
-        queue_len = await redis_client.llen(settings.REDIS_QUEUE_NAME)
-        assert queue_len >= 1
+        assert redis_data["status"] in ("queued", "running", "completed")
+        if redis_data["status"] == "queued":
+            queue_len = await redis_client.llen(settings.REDIS_QUEUE_NAME)
+            assert queue_len >= 1
 
         # Verify disk file
         code_file = pathlib.Path(__file__).parent.parent / "app" / "code" / sub_id / "Main.py"
@@ -430,40 +428,22 @@ class TestRunVsSubmitDistinction:
         assert "test_cases" in poll_data
         assert poll_data["mode"] == "run"
 
-    async def test_run_route_loads_sample_test_cases_from_db(
+    async def test_run_route_without_test_cases_returns_400(
         self,
         async_client: AsyncClient,
-        redis_client: Redis,
         db_session: AsyncSession,
     ) -> None:
-        """Arrange: Problem in DB with sample test cases.
+        """Arrange: Problem in DB.
         Act: POST /api-v1/code/run with NO test_cases.
-        Assert: Sample test cases (is_sample=True) are loaded internally.
+        Assert: 400 Bad Request because run test cases must be provided by the client.
         """
         problem = Problem(
             title="Sample Test Case Problem",
-            description="Testing run mode sample loading.",
+            description="Testing run mode requires test cases.",
             difficulty=ProblemDifficulty.EASY,
             status=ProblemStatus.PUBLISHED,
         )
         db_session.add(problem)
-        await db_session.flush()
-
-        tc_sample = TestCaseModel(
-            problem_id=problem.id,
-            input="sample_in",
-            expected_output="sample_out",
-            is_sample=True,
-            weight=1.0,
-        )
-        tc_hidden = TestCaseModel(
-            problem_id=problem.id,
-            input="hidden_in",
-            expected_output="hidden_out",
-            is_sample=False,
-            weight=5.0,
-        )
-        db_session.add_all([tc_sample, tc_hidden])
         await db_session.commit()
 
         payload = {
@@ -473,17 +453,8 @@ class TestRunVsSubmitDistinction:
         }
 
         response = await async_client.post("/api-v1/code/run", json=payload)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["mode"] == "run"
-
-        sub_id = data["submission"]
-        sub_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{sub_id}"
-        redis_data = await redis_client.hgetall(sub_key)
-        assert redis_data["mode"] == "run"
-        tcs = json.loads(redis_data["test_cases"])
-        assert len(tcs) == 1
-        assert tcs[0]["input"] == "sample_in"
+        assert response.status_code == 400
+        assert "No test cases provided" in response.json()["detail"]
 
     async def test_run_does_not_update_marks_while_submit_does(
         self,

@@ -182,22 +182,10 @@ async def handle_code_execution_request(
             )
     else:  # mode == "run"
         if not submission.test_cases:
-            sample_cases, prob_time_limit, resolved_name = await load_problem_test_cases(
-                submission.problem_id, mode="run", db=db
+            raise HTTPException(
+                status_code=400,
+                detail="No test cases provided.",
             )
-            if sample_cases:
-                submission.test_cases = sample_cases
-                if prob_time_limit and submission.time_limit == 2.0:
-                    submission.time_limit = prob_time_limit
-                if resolved_name and (
-                    not submission.problem_name or submission.problem_name == "Problem Submission"
-                ):
-                    submission.problem_name = resolved_name
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"No test cases provided and no sample test cases found for problem '{submission.problem_id}'.",
-                )
 
     ext = language_extension.get(submission.language)
     submission_dir = pathlib.Path(PARENT_DIR) / "code" / submission.submission_id

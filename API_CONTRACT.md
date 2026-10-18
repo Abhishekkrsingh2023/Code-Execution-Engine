@@ -55,7 +55,7 @@ The frontend utilizes SSE (`EventSource`) with automatic fallback to polling if 
 | `GET` | `/api-v1/users/check-username/{username}` | No | Public | None | `UsernameAvailabilityResponse` (`{ username, is_available, available }`) | None |
 | `GET` | `/api-v1/problems` | No | Public | Query: `skip`, `limit`, `difficulty`, `category`, `topic`, `status`, `search` | `ProblemListResponse` (`{ total, skip, limit, problems: [ProblemResponse] }`) | `422` |
 | `GET` | `/api-v1/problems/{problem_id}` | No | Public | None | `ProblemResponse` | `404 Not Found` |
-| `GET` | `/api-v1/problems/{problem_id}/full` | No | Public | None | `FullProblemResponse` (`{ problem, problem_code, run_test_cases, submit_test_cases, templates, test_cases_count }`) | `404 Not Found` |
+| `GET` | `/api-v1/problems/{problem_id}/full` | No | Public | None | `FullProblemResponse` (`{ problem, problem_code, run_test_cases, templates, test_cases_count }`) | `404 Not Found` |
 | `GET` | `/api-v1/problems/{problem_id}/test-cases` | No | Public | None | `list[TestCaseResponse]` | `404 Not Found` |
 | `POST` | `/api-v1/problems` | Yes | Moderator / Admin | `ProblemCreateRequest` (`title, description, difficulty, category, topic, time_limit, memory_limit, status`) | `ProblemResponse` (201 Created) | `401`, `403`, `422` |
 | `POST` | `/api-v1/problems/full` | Yes | Moderator / Admin | `FullProblemCreateRequest` (`title, description, difficulty, category, topic, time_limit, memory_limit, status, run_test_cases, submit_test_cases, templates`) | `FullProblemResponse` (201 Created) | `401`, `403`, `422` |

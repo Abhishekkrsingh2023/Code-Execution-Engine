@@ -40,7 +40,7 @@ class SubmissionRequest(BaseModel):
         user_code (str): Source code submitted by the user.
         language (Language): Programming language of the submission.
         mode (ExecutionMode): Execution mode ('run' or 'submit').
-        test_cases (List[TestCase]): List of test cases. For 'run', custom test cases can be supplied or loaded from DB. For 'submit', test cases are loaded internally from DB.
+        test_cases (List[TestCase]): List of test cases. For 'run', test cases are supplied by the frontend/client. For 'submit', test cases are loaded internally from DB.
         time_limit (float): Maximum execution time in seconds, default is 2.0 seconds.
         user_id (str | None): Optional user identifier submitting the code.
     """

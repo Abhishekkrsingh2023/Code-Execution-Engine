@@ -28,7 +28,7 @@ async def run_code_request(
 ) -> dict[str, Any]:
     """Run code for testing and execution without updating marks or leaderboard.
 
-    If test_cases are not provided, sample test cases from the problem are loaded.
+    Test cases are provided by the client in the request body.
     Only the execution output/results are returned back to the user.
     """
     return await handle_run_code_request(submission, current_user=current_user, db=db)
