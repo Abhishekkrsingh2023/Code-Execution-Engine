@@ -359,10 +359,10 @@ def process_jobs(client: redis.Redis) -> None:
                 )
             except Exception as exc:
                 log.warning("Could not sync submission {} to database: {}", submission_id, exc)
-        else:
-            log.info(
-                "Submission {} in 'run' mode: marks and leaderboard NOT updated", submission_id
-            )
+        # else:
+        #     log.info(
+        #         "Submission {} in 'run' mode: marks and leaderboard NOT updated", submission_id
+        #     ) # no need to log
 
         # Clean up the submission's source directory from disk
         submission_dir = CODE_BASE / submission_id
