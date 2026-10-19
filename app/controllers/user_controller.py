@@ -20,6 +20,7 @@ from app.schemas.user import (
     UsernameAvailabilityResponse,
     UserRegisterRequest,
     UserResponse,
+    UserUpdateRequest,
     VerifyOTPRequest,
 )
 from app.utils.cookies import clear_auth_cookies, set_auth_cookies
@@ -81,6 +82,7 @@ async def handle_register_user(
     expiry = get_otp_expiry(minutes=10)
 
     new_user = User(
+        name=payload.name,
         username=payload.username,
         email=payload.email,
         password_hash=password_hash,
@@ -515,3 +517,100 @@ async def handle_check_username_availability(
         is_available=not is_taken,
         available=not is_taken,
     )
+
+
+async def handle_update_current_user(
+    current_user: User,
+    payload: UserUpdateRequest,
+    db: AsyncSession,
+) -> UserResponse:
+    """_summary_
+    Updates the authenticated user's profile details.
+    Allows changing name, username, email, and adding or updating password.
+
+    Args:
+        current_user (User): Currently authenticated user model instance.
+        payload (UserUpdateRequest): Profile update payload containing fields to modify.
+        db (AsyncSession): Active database session.
+
+    Returns:
+        UserResponse: Updated sanitized user profile.
+
+    Raises:
+        HTTPException: 400 if current password verification fails.
+        HTTPException: 409 if username or email is already taken by another account.
+        HTTPException: 500 on unexpected database errors.
+    """
+    if "name" in payload.model_fields_set:
+        current_user.name = payload.name if payload.name else None
+
+    if payload.username is not None and payload.username != current_user.username:
+        u_stmt = select(User.id).where(
+            func.lower(User.username) == func.lower(payload.username),
+            User.id != current_user.id,
+        )
+        existing_user = await db.execute(u_stmt)
+        if existing_user.scalar_one_or_none() is not None:
+            logger.warning(
+                "Profile update failed for user {}: Username '{}' already taken",
+                current_user.id,
+                payload.username,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Username '{payload.username}' is already taken.",
+            )
+        current_user.username = payload.username
+
+    if payload.email is not None and payload.email != current_user.email:
+        e_stmt = select(User.id).where(
+            func.lower(User.email) == func.lower(payload.email),
+            User.id != current_user.id,
+        )
+        existing_email = await db.execute(e_stmt)
+        if existing_email.scalar_one_or_none() is not None:
+            logger.warning(
+                "Profile update failed for user {}: Email '{}' already registered",
+                current_user.id,
+                payload.email,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Email '{payload.email}' is already registered.",
+            )
+        current_user.email = payload.email
+
+    if payload.password is not None:
+        if payload.current_password is not None and current_user.has_password:
+            if not verify_password(payload.current_password, current_user.password_hash or ""):
+                logger.warning(
+                    "Profile password update failed for user {}: Current password mismatch",
+                    current_user.id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Current password does not match.",
+                )
+        current_user.password_hash = hash_password(payload.password)
+        logger.info(
+            "Updated password for user '{}' (ID: {})",
+            current_user.username,
+            current_user.id,
+        )
+
+    try:
+        await db.commit()
+        await db.refresh(current_user)
+        logger.info(
+            "Successfully updated profile for user '{}' (ID: {})",
+            current_user.username,
+            current_user.id,
+        )
+        return UserResponse.model_validate(current_user)
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Failed to update profile for user {}: {}", current_user.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user profile due to an internal error.",
+        ) from exc

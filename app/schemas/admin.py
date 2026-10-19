@@ -16,6 +16,7 @@ class AdminUserResponse(BaseModel):
     """User profile response for administrators with activity metrics."""
 
     id: uuid.UUID = Field(..., description="User unique identifier.")
+    name: str | None = Field(default=None, description="User's full name.")
     username: str = Field(..., description="User handle.")
     email: EmailStr = Field(..., description="User email address.")
     role: UserRole = Field(..., description="Role (user, moderator, admin).")
@@ -94,6 +95,7 @@ class AdminUpdateUserStatusRequest(BaseModel):
 class AdminUpdateUserRequest(BaseModel):
     """Comprehensive user update schema for administrators."""
 
+    name: str | None = Field(None, max_length=100, description="Updated full name.")
     username: str | None = Field(None, min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
     email: EmailStr | None = None
     password: str | None = Field(None, min_length=6, max_length=128)

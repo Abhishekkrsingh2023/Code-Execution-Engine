@@ -41,6 +41,11 @@ class User(Base):
         index=True,
         nullable=False,
     )
+    name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        default=None,
+    )
     email: Mapped[str] = mapped_column(
         String(255),
         unique=True,

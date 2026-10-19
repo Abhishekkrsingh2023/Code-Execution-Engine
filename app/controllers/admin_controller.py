@@ -506,6 +506,10 @@ async def handle_admin_update_user(
 
     changes: dict[str, Any] = {}
 
+    if "name" in payload.model_fields_set and payload.name != target_user.name:
+        changes["name"] = {"old": target_user.name, "new": payload.name}
+        target_user.name = payload.name
+
     if payload.username is not None and payload.username != target_user.username:
         u_stmt = select(User.id).where(User.username == payload.username, User.id != user_id)
         if (await db.execute(u_stmt)).scalar_one_or_none() is not None:

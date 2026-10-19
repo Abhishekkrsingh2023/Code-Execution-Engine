@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -51,6 +52,9 @@ def setup_test_database() -> Generator[None]:
     async def _init() -> None:
         async with test_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(100);")
+            )
 
     async def _teardown() -> None:
         await test_engine.dispose()
@@ -141,6 +145,7 @@ async def create_user(
     from app.utils.security import hash_password
 
     async def _create(
+        name: str | None = None,
         username: str = "testuser",
         email: str = "testuser@example.com",
         password: str | None = "Password123!",
@@ -152,6 +157,7 @@ async def create_user(
         otp_expires_at: datetime | None = None,
     ) -> User:
         user = User(
+            name=name,
             username=username,
             email=email,
             password_hash=hash_password(password) if password else None,

@@ -39,6 +39,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.user import User
+from app.utils.jwt import create_access_token
+from app.utils.security import verify_password
 
 
 class TestUserRegister:
@@ -66,6 +68,7 @@ class TestUserRegister:
 
         assert response.status_code == 201
         data = response.json()
+        assert data["name"] is None
         assert data["username"] == "alice_wonderland"
         assert data["email"] == "alice@example.com"
         assert data["role"] == "user"
@@ -77,11 +80,39 @@ class TestUserRegister:
         # Verify database record
         user_id = uuid.UUID(data["id"])
         db_user = (await db_session.execute(select(User).where(User.id == user_id))).scalar_one()
+        assert db_user.name is None
         assert db_user.username == "alice_wonderland"
         assert db_user.password_hash is not None
         assert db_user.otp is not None
         assert len(db_user.otp) == 6
         assert db_user.otp_expires_at is not None
+
+    async def test_register_user_with_name_success(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Registration payload including optional name field.
+        Act: POST to /api-v1/users/register.
+        Assert: 201 Created and name persisted in DB and response.
+        """
+        payload = {
+            "name": "Alice Wonderland",
+            "username": "alice_with_name",
+            "email": "alice_name@example.com",
+            "password": "Password123!",
+        }
+
+        response = await async_client.post("/api-v1/users/register", json=payload)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["name"] == "Alice Wonderland"
+        assert data["username"] == "alice_with_name"
+
+        user_id = uuid.UUID(data["id"])
+        db_user = (await db_session.execute(select(User).where(User.id == user_id))).scalar_one()
+        assert db_user.name == "Alice Wonderland"
 
     async def test_register_user_passwordless_success(
         self,
@@ -624,3 +655,294 @@ class TestUsernameAvailability:
         assert response.status_code == 200
         data = response.json()
         assert data["is_available"] is False
+
+
+class TestUpdateCurrentUserProfile:
+    """Test suite for PATCH /api-v1/users/me."""
+
+    async def test_update_name_success(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Authenticated user with no name set.
+        Act: PATCH /api-v1/users/me with new name.
+        Assert: 200 OK, name returned and persisted.
+        """
+        user = await create_user(username="patch_user1", email="patch1@example.com")
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"name": "Alice Wonderland"},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Alice Wonderland"
+        assert data["username"] == "patch_user1"
+
+        db_user = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert db_user.name == "Alice Wonderland"
+
+    async def test_update_name_to_null_success(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Authenticated user with existing name.
+        Act: PATCH /api-v1/users/me with name=None.
+        Assert: 200 OK, name cleared to None.
+        """
+        user = await create_user(
+            name="Alice Wonderland", username="patch_user2", email="patch2@example.com"
+        )
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"name": None},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] is None
+
+        db_user = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert db_user.name is None
+
+    async def test_add_new_password_to_passwordless_user(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Authenticated passwordless user (has_password=False).
+        Act: PATCH /api-v1/users/me with password.
+        Assert: 200 OK, has_password becomes True, user can login with new password.
+        """
+        user = await create_user(username="otp_user", email="otp_user@example.com", password=None)
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"password": "BrandNewPassword123!"},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["has_password"] is True
+
+        db_user = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert db_user.password_hash is not None
+        assert verify_password("BrandNewPassword123!", db_user.password_hash)
+
+        # Confirm the user can now login with the new password
+        login_res = await async_client.post(
+            "/api-v1/users/login",
+            json={"username_or_email": "otp_user", "password": "BrandNewPassword123!"},
+        )
+        assert login_res.status_code == 200
+
+    async def test_update_existing_password_with_current_password_success(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Authenticated user with existing password.
+        Act: PATCH /api-v1/users/me with correct current_password and new password.
+        Assert: 200 OK, password updated.
+        """
+        user = await create_user(
+            username="pwd_user", email="pwd_user@example.com", password="OldPassword123!"
+        )
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={
+                "current_password": "OldPassword123!",
+                "password": "UpdatedPassword456!",
+            },
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+
+        login_res = await async_client.post(
+            "/api-v1/users/login",
+            json={"username_or_email": "pwd_user", "password": "UpdatedPassword456!"},
+        )
+        assert login_res.status_code == 200
+
+    async def test_update_password_with_incorrect_current_password_fails(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+    ) -> None:
+        """Arrange: Authenticated user with existing password.
+        Act: PATCH /api-v1/users/me with WRONG current_password.
+        Assert: 400 Bad Request with error detail.
+        """
+        user = await create_user(
+            username="bad_pwd_user", email="bad_pwd@example.com", password="RealPassword123!"
+        )
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={
+                "current_password": "WrongPassword!",
+                "password": "NewPassword789!",
+            },
+            headers=headers,
+        )
+
+        assert response.status_code == 400
+        assert "Current password does not match" in response.json()["detail"]
+
+    async def test_update_username_success(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Authenticated user.
+        Act: PATCH /api-v1/users/me with new available username.
+        Assert: 200 OK, username updated.
+        """
+        user = await create_user(username="old_handle", email="old_handle@example.com")
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"username": "new_shiny_handle"},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["username"] == "new_shiny_handle"
+
+        db_user = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert db_user.username == "new_shiny_handle"
+
+    async def test_update_username_conflict_fails(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+    ) -> None:
+        """Arrange: Two users.
+        Act: User 1 tries to change username to User 2's username.
+        Assert: 409 Conflict.
+        """
+        await create_user(username="existing_handle", email="existing@example.com")
+        user1 = await create_user(username="user_one", email="user_one@example.com")
+        token = create_access_token(user_id=user1.id, role=user1.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"username": "existing_handle"},
+            headers=headers,
+        )
+
+        assert response.status_code == 409
+        assert "Username" in response.json()["detail"]
+
+    async def test_update_email_success(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Authenticated user.
+        Act: PATCH /api-v1/users/me with new email.
+        Assert: 200 OK, email updated.
+        """
+        user = await create_user(username="email_user", email="old_email@example.com")
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"email": "new_email@example.com"},
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["email"] == "new_email@example.com"
+
+        db_user = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert db_user.email == "new_email@example.com"
+
+    async def test_update_email_conflict_fails(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+    ) -> None:
+        """Arrange: Two users.
+        Act: User 1 tries to change email to User 2's email.
+        Assert: 409 Conflict.
+        """
+        await create_user(username="email_u1", email="taken_email@example.com")
+        user2 = await create_user(username="email_u2", email="free_email@example.com")
+        token = create_access_token(user_id=user2.id, role=user2.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"email": "taken_email@example.com"},
+            headers=headers,
+        )
+
+        assert response.status_code == 409
+        assert "Email" in response.json()["detail"]
+
+    async def test_update_user_unauthenticated_fails(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Arrange: No auth cookies or header.
+        Act: PATCH /api-v1/users/me.
+        Assert: 401 Unauthorized.
+        """
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"name": "Ghost Name"},
+        )
+
+        assert response.status_code == 401
+
+    async def test_update_user_forbidden_fields_fails(
+        self,
+        async_client: AsyncClient,
+        create_user: Callable[..., Any],
+    ) -> None:
+        """Arrange: Authenticated normal user.
+        Act: Try to inject role='admin'.
+        Assert: 422 Unprocessable Entity (extra fields forbidden).
+        """
+        user = await create_user(username="role_hacker", email="hacker@example.com")
+        token = create_access_token(user_id=user.id, role=user.role)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await async_client.patch(
+            "/api-v1/users/me",
+            json={"role": "admin"},
+            headers=headers,
+        )
+
+        assert response.status_code == 422
