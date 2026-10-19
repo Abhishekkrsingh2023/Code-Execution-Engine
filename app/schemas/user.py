@@ -12,11 +12,18 @@ class UserRegisterRequest(BaseModel):
     All public registrations default to standard USER role; roles cannot be self-assigned.
 
     Attributes:
+        name (Optional[str]): Optional full name or display name (max 100 chars).
         username (str): Unique username handle (3-50 chars).
         email (EmailStr): Unique valid email address.
         password (Optional[str]): Optional password string (min 6 characters).
     """
 
+    name: str | None = Field(
+        None,
+        max_length=100,
+        description="Optional full name or display name.",
+        examples=["Alice Smith"],
+    )
     username: str = Field(
         ...,
         min_length=3,
@@ -128,12 +135,19 @@ class UserUpdateRequest(BaseModel):
     Request schema for updating existing user details.
 
     Attributes:
+        name (Optional[str]): Updated full name or display name.
         username (Optional[str]): Updated username.
         email (Optional[EmailStr]): Updated email address.
-        password (Optional[str]): Updated plaintext password.
-        role (Optional[UserRole]): Updated user role.
+        password (Optional[str]): Updated plaintext password or new password to add.
+        current_password (Optional[str]): Optional current password for verification.
     """
 
+    name: str | None = Field(
+        None,
+        max_length=100,
+        description="Updated full name or display name.",
+        examples=["Alice Smith"],
+    )
     username: str | None = Field(
         None,
         min_length=3,
@@ -151,22 +165,18 @@ class UserUpdateRequest(BaseModel):
         None,
         min_length=6,
         max_length=128,
-        description="Updated account password.",
+        description="Updated account password or new password to add.",
         examples=["NewSecret456!"],
     )
-    role: UserRole | None = Field(
+    current_password: str | None = Field(
         None,
-        description="Updated user role.",
-        examples=[UserRole.MODERATOR],
-    )
-    is_email_verified: bool | None = Field(
-        None,
-        description="Updated email verification status.",
-        examples=[True],
+        min_length=1,
+        max_length=128,
+        description="Optional current account password for verification if changing existing password.",
+        examples=["OldSecret123!"],
     )
 
     model_config = ConfigDict(
-        use_enum_values=True,
         extra="forbid",
         str_strip_whitespace=True,
     )
@@ -178,6 +188,7 @@ class UserResponse(BaseModel):
 
     Attributes:
         id (uuid.UUID): Unique UUID identifier.
+        name (Optional[str]): User's full name or display name.
         username (str): User handle.
         email (EmailStr): User email address.
         role (UserRole): Role assigned to user.
@@ -189,6 +200,7 @@ class UserResponse(BaseModel):
     """
 
     id: uuid.UUID = Field(..., description="Unique UUID identifier of the user.")
+    name: str | None = Field(default=None, description="User's full name or display name.")
     username: str = Field(..., description="User handle.")
     email: EmailStr = Field(..., description="User email address.")
     role: UserRole = Field(..., description="Role assigned to user.")

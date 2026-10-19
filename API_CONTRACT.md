@@ -44,9 +44,10 @@ The frontend utilizes SSE (`EventSource`) with automatic fallback to polling if 
 |---|---|---|---|---|---|---|
 | `GET` | `/health` | No | Any / Public | None | `{"status": "healthy"}` | None |
 | `GET` | `/ping-redis` | No | Any / Public | None | `{"message": "Pong from Redis!"}` | `500` |
-| `POST` | `/api-v1/users/register` | No | Public | `{ username: str, email: str, password?: str }` | `UserResponse` (201 Created) | `409 Conflict`, `422 Unprocessable` |
+| `POST` | `/api-v1/users/register` | No | Public | `{ name?: str, username: str, email: str, password?: str }` | `UserResponse` (201 Created) | `409 Conflict`, `422 Unprocessable` |
 | `POST` | `/api-v1/users/login` | No | Public | `{ username_or_email: str, password: str }` | `UserLoginResponse` (`{ message, user, auth_method }`) + Sets Cookies | `401 Unauthorized`, `403 Forbidden (Unverified/Suspended)`, `422` |
 | `GET` | `/api-v1/users/me` | Yes | Active User (`user`, `moderator`, `admin`) | None | `UserResponse` | `401 Unauthorized`, `403 Forbidden` |
+| `PATCH` | `/api-v1/users/me` | Yes | Active User (`user`, `moderator`, `admin`) | `UserUpdateRequest` (`{ name?: str, username?: str, email?: str, password?: str, current_password?: str }`) | `UserResponse` | `400 Bad Request`, `401 Unauthorized`, `409 Conflict`, `422` |
 | `POST` | `/api-v1/users/otp/request` | No | Public | `{ email: str }` | `OTPResponse` (`{ message, email, expires_in_seconds }`) | `404 Not Found`, `500` |
 | `POST` | `/api-v1/users/otp/verify` | No | Public | `{ email: str, otp: str (6 digits) }` | `UserLoginResponse` (`{ message, user, auth_method }`) + Sets Cookies | `400 Bad Request`, `404 Not Found`, `422` |
 | `POST` | `/api-v1/users/refresh` | Optional / Cookie | Active User | `{ refresh_token?: str }` (or cookie) | `TokenRefreshResponse` (`{ message }`) + Rotates Cookies | `401 Unauthorized`, `403 Forbidden` |
@@ -92,11 +93,8 @@ The frontend utilizes SSE (`EventSource`) with automatic fallback to polling if 
 The following features were specified in the frontend requirements but currently have no corresponding backend endpoints:
 
 ### 1. User Profile Self-Update & Change Password
-- **Missing Endpoints**:
-  - `PATCH /api-v1/users/me` (to update own username/email)
-  - `POST /api-v1/users/me/change-password` (to update password with `{ current_password, new_password }`)
-- **Note**: `UserUpdateRequest` schema exists in `app/schemas/user.py` but is not routed in `user_routes.py`. Only `PATCH /api-v1/admin/users/{user_id}` exists, which is strictly restricted to admins.
-- **Frontend Action**: Built with responsive forms for profile editing and password change. It provides user feedback and is wired to call the planned endpoints when implemented.
+- **Status**: Implemented via `PATCH /api-v1/users/me`.
+- **Supported Fields**: `name`, `username`, `email`, `password`, and optional `current_password` for password verification.
 
 ### 2. User Submission History ("My Submissions")
 - **Missing Endpoints**:

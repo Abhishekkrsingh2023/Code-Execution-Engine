@@ -9,6 +9,7 @@ from app.controllers.user_controller import (
     handle_refresh_token,
     handle_register_user,
     handle_request_otp,
+    handle_update_current_user,
     handle_verify_otp,
 )
 from app.database import get_db
@@ -25,6 +26,7 @@ from app.schemas.user import (
     UsernameAvailabilityResponse,
     UserRegisterRequest,
     UserResponse,
+    UserUpdateRequest,
     VerifyOTPRequest,
 )
 
@@ -126,6 +128,45 @@ async def get_current_user_profile(
 ) -> UserResponse:
     """Returns the profile of the authenticated user from cookies or Authorization header."""
     return UserResponse.model_validate(current_user)
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update authenticated user profile",
+    description="Updates the authenticated user's profile details such as name, username, email, or sets/updates account password.",
+    responses={
+        200: {"description": "User profile updated successfully."},
+        400: {"description": "Current password does not match or invalid update payload."},
+        401: {"description": "Unauthenticated."},
+        409: {"description": "Username or email is already in use by another account."},
+        500: {"description": "Internal server error during profile update."},
+    },
+)
+async def update_current_user_profile(
+    payload: UserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """_summary_
+    This endpoint allows the currently authenticated user to update their personal details,
+    such as their display name, username handle, email address, or add/change their password.
+
+    Args:
+        payload (UserUpdateRequest): Fields to update.
+        current_user (User): Authenticated user instance from JWT/cookies.
+        db (AsyncSession): Database session injected via dependency.
+
+    Returns:
+        UserResponse: Sanitized updated user profile.
+
+    Raises:
+        HTTPException: 400 if current password verification fails.
+        HTTPException: 409 if username or email is already taken.
+        HTTPException: 500 if database persistence fails.
+    """
+    return await handle_update_current_user(current_user=current_user, payload=payload, db=db)
 
 
 @router.post(
