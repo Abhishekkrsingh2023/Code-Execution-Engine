@@ -862,15 +862,14 @@ class TestUpdateCurrentUserProfile:
         assert response.status_code == 409
         assert "Username" in response.json()["detail"]
 
-    async def test_update_email_success(
+    async def test_update_email_forbidden_fails(
         self,
         async_client: AsyncClient,
         create_user: Callable[..., Any],
-        db_session: AsyncSession,
     ) -> None:
         """Arrange: Authenticated user.
-        Act: PATCH /api-v1/users/me with new email.
-        Assert: 200 OK, email updated.
+        Act: PATCH /api-v1/users/me with email field.
+        Assert: 422 Unprocessable Entity (updating email is forbidden).
         """
         user = await create_user(username="email_user", email="old_email@example.com")
         token = create_access_token(user_id=user.id, role=user.role)
@@ -882,34 +881,7 @@ class TestUpdateCurrentUserProfile:
             headers=headers,
         )
 
-        assert response.status_code == 200
-        assert response.json()["email"] == "new_email@example.com"
-
-        db_user = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
-        assert db_user.email == "new_email@example.com"
-
-    async def test_update_email_conflict_fails(
-        self,
-        async_client: AsyncClient,
-        create_user: Callable[..., Any],
-    ) -> None:
-        """Arrange: Two users.
-        Act: User 1 tries to change email to User 2's email.
-        Assert: 409 Conflict.
-        """
-        await create_user(username="email_u1", email="taken_email@example.com")
-        user2 = await create_user(username="email_u2", email="free_email@example.com")
-        token = create_access_token(user_id=user2.id, role=user2.role)
-        headers = {"Authorization": f"Bearer {token}"}
-
-        response = await async_client.patch(
-            "/api-v1/users/me",
-            json={"email": "taken_email@example.com"},
-            headers=headers,
-        )
-
-        assert response.status_code == 409
-        assert "Email" in response.json()["detail"]
+        assert response.status_code == 422
 
     async def test_update_user_unauthenticated_fails(
         self,

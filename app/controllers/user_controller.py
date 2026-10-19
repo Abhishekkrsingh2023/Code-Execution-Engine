@@ -526,7 +526,7 @@ async def handle_update_current_user(
 ) -> UserResponse:
     """_summary_
     Updates the authenticated user's profile details.
-    Allows changing name, username, email, and adding or updating password.
+    Allows changing name, username, and adding or updating password.
 
     Args:
         current_user (User): Currently authenticated user model instance.
@@ -538,7 +538,7 @@ async def handle_update_current_user(
 
     Raises:
         HTTPException: 400 if current password verification fails.
-        HTTPException: 409 if username or email is already taken by another account.
+        HTTPException: 409 if username is already taken by another account.
         HTTPException: 500 on unexpected database errors.
     """
     if "name" in payload.model_fields_set:
@@ -561,24 +561,6 @@ async def handle_update_current_user(
                 detail=f"Username '{payload.username}' is already taken.",
             )
         current_user.username = payload.username
-
-    if payload.email is not None and payload.email != current_user.email:
-        e_stmt = select(User.id).where(
-            func.lower(User.email) == func.lower(payload.email),
-            User.id != current_user.id,
-        )
-        existing_email = await db.execute(e_stmt)
-        if existing_email.scalar_one_or_none() is not None:
-            logger.warning(
-                "Profile update failed for user {}: Email '{}' already registered",
-                current_user.id,
-                payload.email,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Email '{payload.email}' is already registered.",
-            )
-        current_user.email = payload.email
 
     if payload.password is not None:
         if payload.current_password is not None and current_user.has_password:

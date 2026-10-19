@@ -137,7 +137,6 @@ class UserUpdateRequest(BaseModel):
     Attributes:
         name (Optional[str]): Updated full name or display name.
         username (Optional[str]): Updated username.
-        email (Optional[EmailStr]): Updated email address.
         password (Optional[str]): Updated plaintext password or new password to add.
         current_password (Optional[str]): Optional current password for verification.
     """
@@ -155,11 +154,6 @@ class UserUpdateRequest(BaseModel):
         pattern=r"^[a-zA-Z0-9_-]+$",
         description="Updated username handle.",
         examples=["alice_updated"],
-    )
-    email: EmailStr | None = Field(
-        None,
-        description="Updated email address.",
-        examples=["alice_new@example.com"],
     )
     password: str | None = Field(
         None,
