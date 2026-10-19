@@ -27,7 +27,9 @@ BOLD = "\033[1m"
 RESET = "\033[0m"
 
 ROOT_DIR = Path(__file__).parent.resolve()
+BACKEND_DIR = ROOT_DIR / "backend"
 FRONTEND_DIR = ROOT_DIR / "frontend"
+WORKER_DIR = ROOT_DIR / "worker"
 
 
 def check_tcp_port(host: str, port: int, timeout: float = 1.0) -> bool:
@@ -139,7 +141,7 @@ async def main() -> None:
 
     # 2. Apply Database Migrations
     print(f"\n{BOLD}Ensuring database migrations are up to date...{RESET}")
-    await anyio.run_process(["uv", "run", "alembic", "upgrade", "head"], cwd=ROOT_DIR)
+    await anyio.run_process(["uv", "run", "alembic", "upgrade", "head"], cwd=BACKEND_DIR)
 
     # 3. Ensure Frontend Dependencies
     if not (FRONTEND_DIR / "node_modules").is_dir():
@@ -148,7 +150,7 @@ async def main() -> None:
 
     # Set up environment with PYTHONPATH
     env = os.environ.copy()
-    env["PYTHONPATH"] = f"{ROOT_DIR}:{env.get('PYTHONPATH', '')}"
+    env["PYTHONPATH"] = f"{BACKEND_DIR}:{WORKER_DIR}:{ROOT_DIR}:{env.get('PYTHONPATH', '')}"
 
     print(f"\n{BOLD}Starting services...{RESET}")
     print(f"  - {CYAN}{BOLD}[backend]{RESET}  FastAPI API Server     -> http://localhost:8000")
@@ -166,7 +168,7 @@ async def main() -> None:
         "app/main.py",
         "--port",
         "8000",
-        cwd=ROOT_DIR,
+        cwd=BACKEND_DIR,
         env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
@@ -177,8 +179,8 @@ async def main() -> None:
         "uv",
         "run",
         "python",
-        "worker/worker.py",
-        cwd=ROOT_DIR,
+        "worker.py",
+        cwd=WORKER_DIR,
         env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
