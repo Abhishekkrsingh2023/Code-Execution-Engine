@@ -10,40 +10,36 @@ const TEAM_MEMBERS = [
     name: "Abhishek Kumar Singh",
     handle: "@abhishek",
     role: "Lead Systems Architect & Backend Engineer",
-    roleBadge: "Core Architect",
     image: "/team/abhishek.jpg",
-    bio: "Passionate about high-throughput distributed systems, container isolation, and scalable backend infrastructure. Engineered Code0's Docker judge environment, async worker pipeline, and secure execution runtime.",
+    bio: "Passionate about distributed systems and scalable backends. Built Code0’s Docker judge, async worker pipeline, and secure execution runtime.",
     contributions: [
-      "Engineered containerized multi-language execution sandbox with memory & CPU limits",
-      "Architected async task dispatcher using Redis broker and distributed worker processes",
-      "Designed secure database architecture, role-based auth, and unified API contract",
+      "Built a resource-limited, multi-language Docker execution sandbox",
+      "Developed Redis-backed async task dispatch with distributed workers",
+      "Designed secure database schemas, RBAC, and unified API contracts",
     ],
-    skills: ["Python", "FastAPI", "Docker", "AsyncIO", "PostgreSQL", "Redis"],
+    skills: ["Python", "Nodejs", "FastAPI", "Express","Docker", "PostgreSQL", "Redis","Nginx"],
     socials: {
       github: "https://github.com/Abhishekkrsingh2023",
       linkedin: "#",
-      twitter: "#",
-      email: "mailto:abhishekkrsingh2023kolkata@gmail.com",
+      email: "mailto:abhikrsingh.dev@gmail.com",
     },
   },
   {
-    id: "buddy",
-    name: "Alex Rivera",
-    handle: "@buddy_dev",
-    role: "Co-Founder & Full-Stack Product Architect",
-    roleBadge: "Co-Founder",
+    id: "akash",
+    name: "Akash Kumar",
+    handle: "@akash",
+    role: "Full-Stack Product Architect",
     image: "/team/buddy.jpg",
-    bio: "Obsessed with slick developer experiences, modern web architecture, and real-time interfaces. Designed Code0's interactive Monaco IDE playground, real-time leaderboard, and responsive design system.",
+    bio: "Focused on developer experience and modern web architecture. Built Code0’s Monaco IDE, real-time leaderboard, and responsive UI.",
     contributions: [
-      "Crafted responsive Next.js frontend with dark-mode aesthetic and zero-latency feedback",
-      "Integrated Monaco code editor, test case runner, and multi-file problem views",
-      "Designed dynamic leaderboard pagination and live competitive scoring system",
+      "Built a responsive Next.js interface.",
+      "Integrated Monaco Editor, code execution, and test-case views",
+      "Implemented paginated leaderboards and competitive scoring",
     ],
-    skills: ["Next.js", "React 19", "TailwindCSS", "Node.js", "WebSockets", "UI/UX"],
+    skills: ["Python","Nodejs","Next.js", "React", ".NET", "Node.js", "UI/UX"],
     socials: {
-      github: "https://github.com/Abhishekkrsingh2023",
+      github: "https://github.com/godzaryan",
       linkedin: "#",
-      twitter: "#",
       email: "mailto:buddy@example.com",
     },
   },
@@ -207,9 +203,9 @@ export default function AboutPage() {
                         <h3 className="text-xl font-bold text-white tracking-tight">
                           {member.name}
                         </h3>
-                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-900/50 border border-indigo-500/30 text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
+                        {/* <span className="px-2.5 py-0.5 rounded-full bg-indigo-900/50 border border-indigo-500/30 text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
                           {member.roleBadge}
-                        </span>
+                        </span> */}
                       </div>
                       <p className="text-xs font-mono text-indigo-400">{member.handle}</p>
                       <p className="text-xs sm:text-sm font-semibold text-slate-300">

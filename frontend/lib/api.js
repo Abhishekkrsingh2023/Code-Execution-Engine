@@ -88,13 +88,6 @@ apiClient.interceptors.response.use(
         localStorage.removeItem("code_zero_user");
         localStorage.removeItem("code_zero_token");
 
-        if (
-          typeof window !== "undefined" &&
-          !window.location.pathname.startsWith("/login")
-        ) {
-          window.location.href = "/login";
-        }
-
         const customErr = new Error("Session expired. Please log in again.");
         customErr.status = 401;
         return Promise.reject(customErr);

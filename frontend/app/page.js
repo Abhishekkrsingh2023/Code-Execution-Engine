@@ -49,11 +49,11 @@ export default function LandingPage() {
 
     const fadeTimer = setTimeout(() => {
       if (isMounted) setFading(true);
-    }, 700);
+    }, 200);
 
     const doneTimer = setTimeout(() => {
       if (isMounted) setLoading(false);
-    }, 1100);
+    }, 200);
 
     return () => {
       isMounted = false;
@@ -100,16 +100,14 @@ export default function LandingPage() {
               Your Code,
               <br />
               <span className="bg-gradient-to-r from-[#6366f1] via-[#818cf8] to-[#a855f7] bg-clip-text text-transparent">
-                Executed
+                We Execute
               </span>{" "}
               Anywhere.
             </h1>
 
             {/* Subtitle */}
             <p className="text-base sm:text-lg text-slate-400 font-normal leading-relaxed mb-8 max-w-md">
-              Code0 is a powerful, secure and scalable code execution engine that
-              lets you run code in multiple languages — right from your
-              application.
+              Code0 is a powerful, secure, and scalable code execution platform built for developers to write, test, and run code across multiple languages.
             </p>
 
             {/* Action Buttons */}
@@ -123,12 +121,12 @@ export default function LandingPage() {
                   →
                 </span>
               </Link>
-              <a
+              {/* <a
                 href="#features"
                 className="inline-flex items-center px-6 py-3 rounded-full bg-[#0e1320] hover:bg-[#141b2c] border border-white/10 hover:border-white/20 text-slate-200 font-medium text-sm transition-all shadow-sm"
               >
                 View Docs
-              </a>
+              </a> */}
             </div>
 
             {/* Social Proof Dev Avatars */}

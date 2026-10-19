@@ -5,14 +5,16 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 
 function isPublicRoute(pathname) {
+  if (!pathname) return true;
+  const path = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
   if (
-    pathname === "/" ||
-    pathname === "/login" ||
-    pathname === "/register" ||
-    pathname === "/about" ||
-    pathname === "/abouts" ||
-    pathname === "/leaderboard" ||
-    pathname.startsWith("/problems")
+    path === "/" ||
+    path === "/login" ||
+    path === "/register" ||
+    path === "/about" ||
+    path === "/abouts" ||
+    path === "/leaderboard" ||
+    path.startsWith("/problems")
   ) {
     return true;
   }
@@ -25,14 +27,15 @@ export default function AuthGuard({ children }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !pathname) return;
 
-    const isPublic = isPublicRoute(pathname);
-    const isAuthPage = pathname === "/login" || pathname === "/register";
+    const path = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
+    const isPublic = isPublicRoute(path);
+    const isAuthPage = path === "/login" || path === "/register";
 
     // If not authenticated and visiting a protected route -> redirect to /login
     if (!user && !isPublic) {
-      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+      router.replace(`/login?redirect=${encodeURIComponent(path)}`);
       return;
     }
 
@@ -43,7 +46,7 @@ export default function AuthGuard({ children }) {
     }
 
     // If visiting /admin and not an admin or moderator -> redirect to home
-    if (pathname.startsWith("/admin")) {
+    if (path.startsWith("/admin")) {
       const isAllowed = user?.role === "admin" || user?.role === "moderator";
       if (!isAllowed) {
         router.replace("/");
@@ -52,11 +55,12 @@ export default function AuthGuard({ children }) {
     }
   }, [user, loading, pathname, router]);
 
-  const isPublic = isPublicRoute(pathname);
+  const cleanPath = pathname ? (pathname === "/" ? "/" : pathname.replace(/\/+$/, "")) : "/";
+  const isPublic = isPublicRoute(cleanPath);
   const isUnauthorized = !loading && !user && !isPublic;
   const isForbiddenAdmin =
     !loading &&
-    pathname.startsWith("/admin") &&
+    cleanPath.startsWith("/admin") &&
     user?.role !== "admin" &&
     user?.role !== "moderator";
 
