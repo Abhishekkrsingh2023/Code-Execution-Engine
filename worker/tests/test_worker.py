@@ -4,22 +4,33 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.config import settings as app_settings
-from worker.config import WorkerSettings
-from worker.container import DockerContainerEngine
-from worker.models import Problem, Submission, SubmissionStatus, User
-from worker.services import (
-    map_job_status_to_submission_status,
-    record_submission_completion,
-    resolve_problem_id,
-    update_user_leaderboard_score,
-)
-from worker.worker import extract_submission_data
+try:
+    from worker.config import WorkerSettings
+    from worker.config import settings as worker_settings
+    from worker.container import DockerContainerEngine
+    from worker.models import Problem, Submission, SubmissionStatus, User
+    from worker.services import (
+        map_job_status_to_submission_status,
+        record_submission_completion,
+        resolve_problem_id,
+        update_user_leaderboard_score,
+    )
+    from worker.worker import extract_submission_data
+except (ImportError, ModuleNotFoundError):
+    from config import WorkerSettings
+    from config import settings as worker_settings
+    from container import DockerContainerEngine
+    from models import Problem, Submission, SubmissionStatus, User
+    from services import (
+        map_job_status_to_submission_status,
+        record_submission_completion,
+        resolve_problem_id,
+        update_user_leaderboard_score,
+    )
+    from worker import extract_submission_data
 
 # Use sync engine pointing to the test database
-TEST_SYNC_DB_URL = app_settings.DATABASE_URL.replace("/code_buddy", "/code_buddy_test").replace(
-    "+asyncpg", "+psycopg"
-)
+TEST_SYNC_DB_URL = worker_settings.sync_database_url.replace("/code_buddy", "/code_buddy_test")
 sync_test_engine = create_engine(TEST_SYNC_DB_URL, echo=False)
 
 
@@ -47,7 +58,9 @@ def test_worker_settings():
     )
     assert ws.REDIS_HOST == "custom_redis"
     assert ws.REDIS_PORT == 6380
-    assert ws.sync_database_url == "postgresql+psycopg://postgres:password@localhost:5432/code_buddy"
+    assert (
+        ws.sync_database_url == "postgresql+psycopg://postgres:password@localhost:5432/code_buddy"
+    )
     assert "python" in ws.docker_images
     assert "cpp" in ws.docker_images
 
