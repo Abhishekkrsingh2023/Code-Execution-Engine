@@ -250,12 +250,48 @@ class TestLeaderboardRoutes:
         assert users[0]["rank"] == 1
         assert users[0]["total_score"] == 250.0
         assert users[0]["problems_solved"] == 3
+        assert "role" not in users[0]
 
         # Alice is #2
         assert users[1]["username"] == "alice"
         assert users[1]["rank"] == 2
         assert users[1]["total_score"] == 150.0
         assert users[1]["problems_solved"] == 2
+        assert "role" not in users[1]
+
+    async def test_leaderboard_excludes_admin_users(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+        user_alice: User,
+        admin_user: User,
+    ) -> None:
+        """Admins must not appear in the leaderboard or affect rankings."""
+        admin_user.total_score = 999.0
+        admin_user.problems_solved = 10
+        user_alice.total_score = 50.0
+        user_alice.problems_solved = 1
+        await db_session.commit()
+
+        response = await async_client.get("/api-v1/leaderboard")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Admin must not be included
+        usernames = [u["username"] for u in data["users"]]
+        assert admin_user.username not in usernames
+        assert "alice" in usernames
+        assert data["users"][0]["username"] == "alice"
+        assert data["users"][0]["rank"] == 1
+        assert "role" not in data["users"][0]
+
+        # Admin calling /api-v1/leaderboard/me gets 404 (only role=user is ranked)
+        admin_token = create_access_token(admin_user.id, admin_user.role)
+        me_response = await async_client.get(
+            "/api-v1/leaderboard/me",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert me_response.status_code == 404
 
     async def test_leaderboard_me_authenticated(
         self,
@@ -280,21 +316,37 @@ class TestLeaderboardRoutes:
         assert data["username"] == "alice"
         assert data["rank"] == 2
         assert data["total_score"] == 100.0
+        assert "role" not in data
 
-    async def test_leaderboard_search(
+    async def test_leaderboard_pagination(
         self,
         async_client: AsyncClient,
         db_session: AsyncSession,
         user_alice: User,
         user_bob: User,
     ) -> None:
-        """Search query filters users by username."""
-        response = await async_client.get("/api-v1/leaderboard?search=ali")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] == 1
-        assert len(data["users"]) == 1
-        assert data["users"][0]["username"] == "alice"
+        """Pagination returns correct limit and skip offsets."""
+        user_bob.total_score = 250.0
+        user_alice.total_score = 150.0
+        await db_session.commit()
+
+        # Page 1 (limit 1, skip 0)
+        res1 = await async_client.get("/api-v1/leaderboard?skip=0&limit=1")
+        assert res1.status_code == 200
+        d1 = res1.json()
+        assert d1["total"] == 2
+        assert len(d1["users"]) == 1
+        assert d1["users"][0]["username"] == "bob"
+        assert d1["users"][0]["rank"] == 1
+
+        # Page 2 (limit 1, skip 1)
+        res2 = await async_client.get("/api-v1/leaderboard?skip=1&limit=1")
+        assert res2.status_code == 200
+        d2 = res2.json()
+        assert d2["total"] == 2
+        assert len(d2["users"]) == 1
+        assert d2["users"][0]["username"] == "alice"
+        assert d2["users"][0]["rank"] == 2
 
     async def test_submit_code_authenticated_and_poll_syncs_leaderboard(
         self,

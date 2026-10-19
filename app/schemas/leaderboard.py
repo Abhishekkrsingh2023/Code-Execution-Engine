@@ -10,7 +10,6 @@ class LeaderboardEntryResponse(BaseModel):
     total_score: float = Field(..., description="Total points accumulated across problems.")
     problems_solved: int = Field(..., description="Total distinct problems solved.")
     submissions_count: int = Field(default=0, description="Total submissions attempted by user.")
-    role: str = Field(default="user", description="Account authorization role.")
     created_at: str | None = Field(
         default=None, description="ISO timestamp of account registration."
     )

@@ -70,8 +70,8 @@ The frontend utilizes SSE (`EventSource`) with automatic fallback to polling if 
 | `POST` | `/api-v1/code/submit` | Optional | Any | `SubmitRequest` (`problem_id: int, user_code: str, language: str, time_limit?: float`) | `{ message, submission: UUID, status: "queued", mode: "submit", streaming_url, polling_url }` | `400`, `404`, `422`, `500` |
 | `GET` | `/api-v1/code/stream/{submission_id}` | No | Any | None | SSE stream (`text/event-stream` with `event: result`) | `500` |
 | `GET` | `/api-v1/code/submission/poll/{submission_id}` | No | Any | None | JSON Dict (`status, output, error, results, time_taken, score, max_score, tests_passed, total_tests`) | `404 Not Found` |
-| `GET` | `/api-v1/leaderboard` | Optional | Any | Query: `skip`, `limit`, `search` | `LeaderboardResponse` (`{ total, skip, limit, users: [LeaderboardEntryResponse], my_rank: LeaderboardEntryResponse \| null }`) | `422` |
-| `GET` | `/api-v1/leaderboard/me` | Yes | Active User | None | `LeaderboardEntryResponse` (`{ rank, user_id, username, total_score, problems_solved, submissions_count, role, created_at }`) | `401`, `404` |
+| `GET` | `/api-v1/leaderboard` | Optional | Any | Query: `skip`, `limit` | `LeaderboardResponse` (`{ total, skip, limit, users: [LeaderboardEntryResponse], my_rank: LeaderboardEntryResponse \| null }`) | `422` |
+| `GET` | `/api-v1/leaderboard/me` | Yes | Active User | None | `LeaderboardEntryResponse` (`{ rank, user_id, username, total_score, problems_solved, submissions_count, created_at }`) | `401`, `404` |
 | `GET` | `/api-v1/admin/users` | Yes | Admin | Query: `skip`, `limit`, `role`, `status`, `search` | `AdminUserListResponse` (`{ total, skip, limit, users: [AdminUserResponse] }`) | `401`, `403`, `422` |
 | `GET` | `/api-v1/admin/users/{user_id}` | Yes | Admin | None | `AdminUserDetailResponse` (`...AdminUserResponse, recent_submissions: list[dict], recent_audit_actions: list[dict]`) | `401`, `403`, `404` |
 | `PATCH` | `/api-v1/admin/users/{user_id}/role` | Yes | Admin | `AdminUpdateUserRoleRequest` (`role: UserRole`) | `AdminUserResponse` | `401`, `403`, `404`, `422` |

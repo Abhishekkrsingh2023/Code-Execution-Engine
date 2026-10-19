@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import SessionLocal
 from app.models.problem import Problem
 from app.models.submission import Submission, SubmissionLanguage, SubmissionStatus
-from app.models.user import User, UserStatus
+from app.models.user import User, UserRole, UserStatus
 
 
 async def resolve_problem_id(problem_id_val: int | str | None, db: AsyncSession) -> int | None:
@@ -243,16 +243,16 @@ async def get_leaderboard_data(
     db: AsyncSession,
     skip: int = 0,
     limit: int = 50,
-    search: str | None = None,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """Retrieves paginated leaderboard rankings sorted by total_score desc, problems_solved desc, created_at asc."""
-    count_stmt = select(func.count(User.id)).where(User.status == UserStatus.ACTIVE)
-    query_stmt = select(User).where(User.status == UserStatus.ACTIVE)
-
-    if search and search.strip():
-        term = f"%{search.strip()}%"
-        count_stmt = count_stmt.where(User.username.ilike(term))
-        query_stmt = query_stmt.where(User.username.ilike(term))
+    """Retrieves paginated leaderboard rankings for regular users sorted by total_score desc, problems_solved desc, created_at asc."""
+    count_stmt = select(func.count(User.id)).where(
+        User.status == UserStatus.ACTIVE,
+        User.role == UserRole.USER,
+    )
+    query_stmt = select(User).where(
+        User.status == UserStatus.ACTIVE,
+        User.role == UserRole.USER,
+    )
 
     total = (await db.execute(count_stmt)).scalar_one()
 
@@ -294,7 +294,6 @@ async def get_leaderboard_data(
             "total_score": u.total_score,
             "problems_solved": u.problems_solved,
             "submissions_count": sub_count_map.get(u.id, 0),
-            "role": u.role.value if hasattr(u.role, "value") else str(u.role),
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for idx, u in enumerate(users)
@@ -307,18 +306,23 @@ async def get_user_rank_data(
     user_id: uuid.UUID,
     db: AsyncSession,
 ) -> dict[str, Any] | None:
-    """Calculates the specific rank and stats for a given user."""
-    stmt = select(User).where(User.id == user_id, User.status == UserStatus.ACTIVE)
+    """Calculates the specific rank and stats for a given regular user."""
+    stmt = select(User).where(
+        User.id == user_id,
+        User.status == UserStatus.ACTIVE,
+        User.role == UserRole.USER,
+    )
     user = (await db.execute(stmt)).scalar_one_or_none()
     if not user:
         return None
 
-    # Count how many users have higher score or tiebreakers
+    # Count how many users with role=USER have higher score or tiebreakers
     # (total_score > my_score) OR
     # (total_score == my_score AND problems_solved > my_solved) OR
     # (total_score == my_score AND problems_solved == my_solved AND created_at < my_created_at)
     higher_count_stmt = select(func.count(User.id)).where(
         User.status == UserStatus.ACTIVE,
+        User.role == UserRole.USER,
         (User.total_score > user.total_score)
         | ((User.total_score == user.total_score) & (User.problems_solved > user.problems_solved))
         | (
@@ -340,6 +344,5 @@ async def get_user_rank_data(
         "total_score": user.total_score,
         "problems_solved": user.problems_solved,
         "submissions_count": sub_count,
-        "role": user.role.value if hasattr(user.role, "value") else str(user.role),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }

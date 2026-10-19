@@ -23,7 +23,6 @@ router = APIRouter(
 async def get_leaderboard(
     skip: int = Query(default=0, ge=0, description="Pagination offset."),
     limit: int = Query(default=50, ge=1, le=100, description="Page limit."),
-    search: str | None = Query(default=None, description="Filter ranking by username search."),
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> LeaderboardResponse:
@@ -31,7 +30,6 @@ async def get_leaderboard(
         db=db,
         skip=skip,
         limit=limit,
-        search=search,
     )
 
     my_rank_data = None

@@ -19,6 +19,7 @@ dependencies = [
     "bcrypt>=5.0.0",
     "pyjwt>=2.15.1",
     "psycopg[binary]>=3.2.0",
+    "asyncer>=0.0.18",
 ]
 
 [dependency-groups]
