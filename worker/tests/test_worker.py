@@ -65,6 +65,22 @@ def test_worker_settings():
     assert "cpp" in ws.docker_images
 
 
+def test_resolve_code_base():
+    ws = WorkerSettings()
+    resolved = ws.resolve_code_base()
+    assert resolved.exists()
+    assert resolved.name == "code"
+    assert resolved.parent.name == "backend"
+
+
+def test_resolve_code_base_custom(tmp_path):
+    custom_dir = tmp_path / "custom_code"
+    ws = WorkerSettings(CODE_BASE_DIR=str(custom_dir))
+    resolved = ws.resolve_code_base()
+    assert resolved == custom_dir.resolve()
+    assert resolved.exists()
+
+
 def test_extract_submission_data():
     job_json = (
         '{"submission_id": "sub-123", "language": "python", "user_code": "print(1)", '

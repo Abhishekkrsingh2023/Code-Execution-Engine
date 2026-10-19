@@ -1,3 +1,4 @@
+import pathlib
 import warnings
 
 from pydantic import model_validator
@@ -16,6 +17,9 @@ class Settings(BaseSettings):
     POOL_SIZE: int = 10
     MAX_OVERFLOW: int = 20
     POOL_RECYCLE: int = 1800
+
+    # Code Execution and Storage
+    CODE_BASE_DIR: str | None = None
 
     # Debugging — set SQL_ECHO=true in .env to log queries (never enable in production)
     SQL_ECHO: bool = False
@@ -83,6 +87,16 @@ class Settings(BaseSettings):
                 stacklevel=2,
             )
         return self
+
+    def resolve_code_dir(self) -> pathlib.Path:
+        """Resolves the base directory for code submissions."""
+        if self.CODE_BASE_DIR:
+            p = pathlib.Path(self.CODE_BASE_DIR).resolve()
+        else:
+            backend_root = pathlib.Path(__file__).resolve().parent.parent
+            p = (backend_root / "code").resolve()
+        p.mkdir(parents=True, exist_ok=True)
+        return p
 
 
 settings = Settings()

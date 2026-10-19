@@ -1,5 +1,4 @@
 import asyncio
-import pathlib
 import shutil
 import uuid
 from collections.abc import AsyncGenerator
@@ -24,7 +23,6 @@ from app.schemas.submission import ExecutionMode, SubmissionRequest, TestCase
 from app.services.leaderboard_service import record_submission_completion, resolve_problem_id
 
 redis_client = get_async_redis_client()
-PARENT_DIR = pathlib.Path(__file__).parent.parent
 
 language_extension = {
     "python": "py",
@@ -188,7 +186,7 @@ async def handle_code_execution_request(
             )
 
     ext = language_extension.get(submission.language)
-    submission_dir = pathlib.Path(PARENT_DIR) / "code" / submission.submission_id
+    submission_dir = settings.resolve_code_dir() / submission.submission_id
     file_path = submission_dir / f"Main.{ext}"
     submission_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{submission.submission_id}"
 

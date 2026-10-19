@@ -17,7 +17,7 @@ This test suite provides automated integration and endpoint testing for all Fast
   - The test suite interacts with Redis and automatically purges test keys (`submission:*`, `result:*`, and `code:queue`) after each test.
   - The Redis connection pool is cleanly disconnected between tests to allow subsequent tests to run within their own event loops.
 - **Disk Artifact Cleanup**:
-  - The `cleanup_code_storage` fixture ensures any submission directories written to `app/code/{submission_id}` during testing are removed upon test completion.
+  - The `cleanup_code_storage` fixture ensures any submission directories written to `backend/code/{submission_id}` during testing are removed upon test completion.
 
 ---
 

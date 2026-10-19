@@ -84,7 +84,7 @@ finally:
     │
     ▼
 [ FastAPI Server ] ──► Stores metadata in Redis Hash (`submission:<id>`, with `mode`)
-    │              ──► Prepares workspace directory (`app/code/<id>/`)
+    │              ──► Prepares workspace directory (`backend/code/<id>/`)
     │              ──► Pushes job into Redis Queue (`code:queue`)
     │
     ▼
@@ -272,34 +272,43 @@ uv run alembic check
 
 ```text
 code-executor/
-├── app/
+├── backend/                       # FastAPI REST API service
+│   ├── alembic/                   # Database migrations
+│   ├── alembic.ini                # Alembic configuration
+│   ├── app/
+│   │   ├── controllers/           # Endpoint controllers (admin, code, problem, user)
+│   │   ├── models/                # SQLAlchemy ORM models (User, Problem, TestCase, Submission, etc.)
+│   │   ├── routers/               # FastAPI route endpoints (/api-v1/*)
+│   │   ├── schemas/               # Pydantic schemas for request validation & response formatting
+│   │   ├── services/              # Business logic & leaderboard ranking services
+│   │   ├── utils/                 # Utilities (JWT tokens, cookies, security, audit logger)
+│   │   ├── config.py              # Environment configuration & settings
+│   │   ├── database.py            # Async SQLAlchemy engine and session setup
+│   │   ├── dependencies.py        # FastAPI dependency injection providers
+│   │   ├── main.py                # FastAPI entrypoint, middleware, and CORS configuration
+│   │   └── redis_client.py        # Async Redis connection pool setup
 │   ├── code/                      # Ephemeral directory for code execution jobs
-│   ├── config.py                  # Global settings (Redis, Database URLs, connection pools)
-│   ├── controllers/
-│   │   ├── code_controller.py     # Code execution & streaming controller
-│   │   └── user_controller.py     # User registration, OTP authentication & profile controller
-│   ├── database.py                # Async SQLAlchemy engine and session setup
-│   ├── main.py                    # FastAPI application entrypoint and health routes
-│   ├── models/                    # SQLAlchemy models (User, Problem, TestCase, Submission, SubmissionResult)
-│   ├── redis_client.py            # Async Redis connection pool setup
-│   ├── routers/
-│   │   ├── code_routes.py         # Endpoints for code submission and status polling
-│   │   ├── root_routes.py         # Health and Redis ping endpoints
-│   │   └── user_routes.py         # REST & auth endpoints for user management
-│   ├── schemas/
-│   │   ├── submission.py          # Pydantic schemas for submissions & test cases
-│   │   └── user.py                # Pydantic schemas for users, auth & OTP
-│   └── utils/
-│       └── security.py            # Bcrypt password hashing & secure OTP generation
-├── worker/
-│   ├── container.py               # Reusable DockerContainerEngine class
-│   └── worker.py                  # Redis worker process consuming code:queue
-├── alembic/                       # Database migrations
-├── alembic.ini                    # Alembic configuration
-├── docker-compose.yml             # Local PostgreSQL & Redis service definitions
-├── automate.py                    # Script to automate problem creation & templates
-├── create-folder.py               # Helper utility to scaffold problem directories
-├── pyproject.toml                 # Project metadata & Python dependencies (uv / pip)
+│   ├── tests/                     # Pytest integration & endpoint test suite
+│   └── pyproject.toml             # Backend dependencies and project configuration (uv)
+├── worker/                        # Code execution background worker
+│   ├── container.py               # Sandboxed Docker container runner with strict resource limits
+│   ├── worker.py                  # Redis queue consumer and execution dispatcher
+│   ├── config.py                  # Worker configuration and code directory resolution
+│   ├── database.py                # Synchronous psycopg connection pool
+│   ├── models.py                  # Synchronous SQLAlchemy data models
+│   ├── services.py                # Result persistence & leaderboard scoring service
+│   ├── tests/                     # Worker test suite (pytest)
+│   ├── Dockerfile                 # Worker container definition
+│   └── pyproject.toml             # Worker dependencies and project configuration (uv)
+├── frontend/                      # Next.js web application
+│   ├── app/                       # Next.js App Router pages (problems, leaderboard, profile, auth)
+│   ├── components/                # Reusable UI components (Navbar, AuthGuard, Code0Loader)
+│   ├── lib/                       # API client, AuthContext, and client utilities
+│   ├── package.json               # Frontend dependencies and scripts (bun)
+│   └── bun.lock                   # Bun lockfile
+├── docker-compose.yml             # Local PostgreSQL & Redis container stack
+├── run_all.py                     # Unified development runner using asyncer
+├── API_CONTRACT.md                # REST API contract documentation
 └── README.md
 ```
 
@@ -345,41 +354,61 @@ docker compose up -d
 
 ### 4. Install Dependencies
 
-Using `uv`:
+Install dependencies for each service:
+
 ```bash
-uv sync
-```
-Or using standard `pip`:
-```bash
-pip install -e .
+# Backend dependencies (uv)
+cd backend && uv sync && cd ..
+
+# Worker dependencies (uv)
+cd worker && uv sync && cd ..
+
+# Frontend dependencies (bun)
+cd frontend && bun install && cd ..
 ```
 
 ### 5. Run Database Migrations
 
-Apply Alembic migrations to set up the PostgreSQL schema:
+Apply Alembic migrations from the `backend` directory:
 
 ```bash
+cd backend
 uv run alembic upgrade head
+cd ..
 ```
 
 ---
 
 ## 🏃 Running the Application
 
-### 1. Start the FastAPI API Server
+### Option A: Unified Runner (Recommended)
+
+Launch all services concurrently (FastAPI backend, execution worker, and Next.js frontend):
 
 ```bash
-uv run fastapi dev app/main.py --port 8000
+python run_all.py
 ```
-Interactive Swagger documentation will be available at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 2. Start the Background Worker
+### Option B: Run Services Individually
 
-In a separate terminal, launch the worker listening to the Redis queue:
+1. **FastAPI Backend**:
+   ```bash
+   cd backend
+   uv run fastapi dev app/main.py --port 8000
+   ```
+   Interactive Swagger documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-```bash
-uv run python worker/worker.py
-```
+2. **Execution Worker**:
+   ```bash
+   cd worker
+   uv run python worker.py
+   ```
+
+3. **Next.js Frontend**:
+   ```bash
+   cd frontend
+   bun dev
+   ```
 
 ---
 
@@ -558,7 +587,7 @@ curl -X POST "http://localhost:8000/api-v1/users/otp/verify" \
 Running untrusted user-submitted code requires rigorous sandboxing:
 - **No Network Egress**: Docker flag `--network none` guarantees that malicious code cannot initiate outbound network requests, port scans, or participate in botnets.
 - **Resource Constraints**: Strict limits on RAM (`--memory 128m`) and CPU cores (`--cpus 0.5`) defend the host machine from fork-bombs and memory leak exploits.
-- **Isolated Ephemeral Volumes**: Every submission runs in an isolated directory (`app/code/<submission_id>`), which is cleaned up immediately after evaluation.
+- **Isolated Ephemeral Volumes**: Every submission runs in an isolated directory (`backend/code/<submission_id>`), which is cleaned up immediately after evaluation.
 - **Ephemeral Container Lifetime**: Each execution creates a dedicated container that is forcefully terminated and deleted (`docker rm -f`) post-run.
 
 ---

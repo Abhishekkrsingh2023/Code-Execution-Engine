@@ -4,7 +4,7 @@ This module validates:
 - POST /api-v1/code/submit-code:
     - Successful submission enqueueing across supported languages (python, cpp, java, c)
     - Redis hash metadata persistence and queue job insertion
-    - Disk artifact generation under app/code/{submission_id}
+    - Disk artifact generation under backend/code/{submission_id}
     - Request validation errors (unsupported language, empty code, empty test cases, forbidden fields)
     - Error handling and disk cleanup on enqueue failure
 - GET /api-v1/code/stream/{submission_id}:
@@ -16,7 +16,6 @@ This module validates:
 """
 
 import json
-import pathlib
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -46,7 +45,7 @@ class TestCodeSubmitRoute:
         - 200 OK with queued status, submission ID, streaming & polling URLs.
         - Redis hash 'submission:{id}' contains expected fields and status 'queued'.
         - Redis list 'code:queue' contains the serialized payload.
-        - app/code/{id}/Main.py is created on disk with exact user code.
+        - backend/code/{id}/Main.py is created on disk with exact user code.
         """
         payload = {
             "problem_id": 1,
@@ -82,7 +81,7 @@ class TestCodeSubmitRoute:
             assert queue_len >= 1
 
         # Verify disk file
-        code_file = pathlib.Path(__file__).parent.parent / "app" / "code" / sub_id / "Main.py"
+        code_file = settings.resolve_code_dir() / sub_id / "Main.py"
         assert code_file.exists()
         assert code_file.read_text(encoding="utf-8") == payload["user_code"]
 
@@ -117,9 +116,7 @@ class TestCodeSubmitRoute:
 
         assert response.status_code == 200
         sub_id = response.json()["submission"]
-        code_file = (
-            pathlib.Path(__file__).parent.parent / "app" / "code" / sub_id / f"Main.{file_ext}"
-        )
+        code_file = settings.resolve_code_dir() / sub_id / f"Main.{file_ext}"
         assert code_file.exists()
 
     async def test_submit_code_unsupported_language_fails(

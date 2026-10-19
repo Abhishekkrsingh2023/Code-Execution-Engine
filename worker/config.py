@@ -75,11 +75,13 @@ class WorkerSettings(BaseSettings):
             p = pathlib.Path(self.CODE_BASE_DIR).resolve()
         else:
             root = base_path or pathlib.Path.cwd()
-            repo_app_code = root / "app" / "code"
-            if repo_app_code.exists():
-                p = repo_app_code
+            candidate = root / "backend" / "code"
+            if candidate.exists():
+                p = candidate.resolve()
+            elif (root.parent / "backend" / "code").exists():
+                p = (root.parent / "backend" / "code").resolve()
             else:
-                p = (root / "code").resolve()
+                p = candidate.resolve()
         p.mkdir(parents=True, exist_ok=True)
         return p
 

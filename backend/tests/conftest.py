@@ -8,7 +8,6 @@ Provides test fixtures for:
 """
 
 import asyncio
-import pathlib
 import shutil
 from collections.abc import AsyncGenerator, Callable, Coroutine, Generator
 from datetime import datetime
@@ -99,8 +98,8 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 @pytest_asyncio.fixture(autouse=True)
 async def cleanup_code_storage() -> AsyncGenerator[None]:
-    """Cleans up any temporary code submission folders created in app/code during tests."""
-    code_dir = pathlib.Path(__file__).parent.parent / "app" / "code"
+    """Cleans up any temporary code submission folders created in code directory during tests."""
+    code_dir = settings.resolve_code_dir()
     yield
     if code_dir.exists():
         for item in code_dir.iterdir():
