@@ -6,6 +6,7 @@ router = APIRouter()
 
 
 @router.get("/ping-redis")
+@router.get("/api-v1/ping-redis")
 async def ping_redis() -> dict[str, str]:
     try:
         pong = await get_async_redis_client().ping()
@@ -21,5 +22,6 @@ async def ping_redis() -> dict[str, str]:
 
 
 @router.get("/health")
+@router.get("/api-v1/health")
 def health_check() -> dict[str, str]:
     return {"status": "healthy"}

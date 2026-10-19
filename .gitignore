@@ -21,3 +21,6 @@ frontend/out/
 /logs/
 *.log
 app/code/
+
+
+AGENTS.md
