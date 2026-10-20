@@ -72,27 +72,37 @@ export default function Navbar() {
     : "U";
 
   return (
-    <nav className="sticky top-0 z-50 backdrop-blur-md bg-[#07090e]/85 border-b border-white/[0.08]">
+    <nav
+      className={`sticky top-0 z-50 ${
+        isProblemDetail
+          ? "px-2 pt-2 pb-0 bg-[#07090e]"
+          : "backdrop-blur-md bg-[#07090e]/85 border-b border-white/[0.08]"
+      }`}
+    >
       <div
         className={`${
           isProblemDetail
-            ? "w-full px-4 sm:px-6"
+            ? "w-full px-3.5 sm:px-4 rounded-2xl bg-[#0a0d14] border border-white/[0.08] shadow-lg shadow-black/40 hover:border-white/[0.14] transition-colors"
             : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
         }`}
       >
-        <div className="relative flex items-center justify-between h-16">
+        <div
+          className={`relative flex items-center justify-between ${
+            isProblemDetail ? "h-10 sm:h-11" : "h-16"
+          }`}
+        >
           {/* Left: Brand Logo */}
           <div className="flex items-center shrink-0">
             <Link
               href="/"
-              className="flex items-center space-x-2.5 text-white font-bold text-lg tracking-tight hover:opacity-95 transition-all group"
+              className="flex items-center space-x-2 text-white font-bold text-base tracking-tight hover:opacity-95 transition-all group"
             >
               <Image
                 src="/Code0.png"
                 alt="Code0 Logo"
                 width={56}
                 height={32}
-                className="h-8 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+                className={`${isProblemDetail ? "h-6" : "h-8"} w-auto object-contain transition-transform duration-200 group-hover:scale-105`}
                 priority
               />
             </Link>
@@ -107,7 +117,7 @@ export default function Navbar() {
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`relative py-5 text-sm font-medium transition-colors ${
+                  className={`relative ${isProblemDetail ? "py-3.5" : "py-5"} text-sm font-medium transition-colors ${
                     active
                       ? "text-white font-semibold"
                       : "text-slate-400 hover:text-white"

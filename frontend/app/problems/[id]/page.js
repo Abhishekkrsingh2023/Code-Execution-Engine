@@ -8,6 +8,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { useAuth } from "@/lib/AuthContext";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 // Dynamically import Monaco Editor with SSR disabled
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -88,7 +89,7 @@ export default function ProblemDetailPage() {
 
   // Layout & Resizing State
   const [leftWidth, setLeftWidth] = useState(42); // percentage
-  const [testcaseHeight, setTestcaseHeight] = useState(270); // in px
+  const [testcaseHeight, setTestcaseHeight] = useState(230); // in px
   const [isTestcaseCollapsed, setIsTestcaseCollapsed] = useState(false);
   const [isDraggingH, setIsDraggingH] = useState(false);
   const [isDraggingV, setIsDraggingV] = useState(false);
@@ -582,7 +583,7 @@ export default function ProblemDetailPage() {
   ];
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-[#07090e] text-slate-200 overflow-hidden select-none">
+    <div className="h-[calc(100vh-3.25rem)] sm:h-[calc(100vh-3.5rem)] flex flex-col bg-[#07090e] text-slate-200 overflow-hidden select-none p-1.5 sm:p-2 pt-1 sm:pt-1.5">
       {/* Invisible overlay during drag to prevent Monaco event interception */}
       {(isDraggingH || isDraggingV) && (
         <div
@@ -599,9 +600,9 @@ export default function ProblemDetailPage() {
         {/* ========================================================= */}
         <div
           style={{ width: `${leftWidth}%` }}
-          className="h-full min-h-0 flex flex-col bg-[#07090e] border-r border-white/[0.08] overflow-y-auto select-text no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="h-full min-h-0 shrink-0 min-w-[280px] max-w-[70%] flex flex-col bg-[#0a0d14] border border-white/[0.08] rounded-2xl shadow-lg shadow-black/40 overflow-hidden relative select-text hover:border-white/[0.14] transition-colors"
         >
-          <div className="p-6 lg:p-8 space-y-6 max-w-3xl">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-4.5 space-y-3.5 max-w-none no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* Back Link */}
             <Link
               href="/problems"
@@ -620,132 +621,135 @@ export default function ProblemDetailPage() {
             </Link>
 
             {/* Title & Difficulty Pill */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
                 {prob.title}
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 shadow-sm">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 shadow-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <span>{prob.difficulty || "Easy"}</span>
               </span>
             </div>
 
             {/* Stats Row (Time Limit, Memory Limit, Success Rate) */}
-            <div className="grid grid-cols-3 gap-3 py-3 border-y border-white/[0.06]">
+            <div className="grid grid-cols-3 gap-2 py-2 border-y border-white/[0.06]">
               {/* Time Limit */}
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <circle cx="12" cy="12" r="9" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 3" />
                   </svg>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400 font-medium">Time Limit</div>
-                  <div className="text-xs sm:text-sm font-bold text-white font-mono">
+                  <div className="text-[10px] text-slate-400 font-medium leading-none">Time Limit</div>
+                  <div className="text-xs font-bold text-white font-mono mt-0.5">
                     {prob.time_limit || "1.0"}s
                   </div>
                 </div>
               </div>
 
               {/* Memory Limit */}
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7z" />
                     <path d="M4 10h16M4 14h16" />
                   </svg>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400 font-medium">Memory Limit</div>
-                  <div className="text-xs sm:text-sm font-bold text-white font-mono">
+                  <div className="text-[10px] text-slate-400 font-medium leading-none">Memory Limit</div>
+                  <div className="text-xs font-bold text-white font-mono mt-0.5">
                     {prob.memory_limit || "256"}MB
                   </div>
                 </div>
               </div>
 
               {/* Success Rate */}
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400 font-medium">Success Rate</div>
-                  <div className="text-xs sm:text-sm font-bold text-white font-mono">82.4%</div>
+                  <div className="text-[10px] text-slate-400 font-medium leading-none">Success Rate</div>
+                  <div className="text-xs font-bold text-white font-mono mt-0.5">82.4%</div>
                 </div>
               </div>
             </div>
 
             {/* Problem Description Body */}
-            <div className="space-y-4 text-sm text-slate-300 leading-relaxed font-normal">
-              <div className="whitespace-pre-wrap">{prob.description}</div>
+            <div className="text-xs sm:text-[13px] text-slate-300 leading-relaxed font-normal">
+              <MarkdownRenderer content={prob.description} />
             </div>
 
-            {/* Examples Section */}
-            <div className="space-y-4 pt-2">
-              <h2 className="text-sm font-bold text-white tracking-tight uppercase">Examples</h2>
+            {/* Fallback Examples Section (only shown if not provided in markdown description) */}
+            {!prob.description?.toLowerCase().includes("example") && (
+              <div className="space-y-4 pt-2">
+                <h2 className="text-sm font-bold text-white tracking-tight uppercase">Examples</h2>
 
-              {sampleCases && sampleCases.length > 0 ? (
-                <div className="space-y-3.5">
-                  {sampleCases.slice(0, 3).map((sc, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-[#0b0e17] border border-white/[0.08] rounded-2xl p-4.5 space-y-2 text-xs font-mono shadow-sm"
-                    >
-                      <div className="text-xs font-bold text-slate-200 font-sans mb-1">
-                        Example {idx + 1}
-                      </div>
-                      <div className="text-slate-300">
-                        <strong className="text-slate-400 font-sans">Input: </strong>
-                        <span className="text-indigo-200 whitespace-pre-wrap">{sc.input}</span>
-                      </div>
-                      <div className="text-slate-300">
-                        <strong className="text-slate-400 font-sans">Output: </strong>
-                        <span className="text-emerald-300 whitespace-pre-wrap">{sc.expected_output}</span>
-                      </div>
-                      {sc.explanation && (
-                        <div className="text-slate-400 font-sans text-[11px] pt-1">
-                          <strong>Explanation: </strong>
-                          <span>{sc.explanation}</span>
+                {sampleCases && sampleCases.length > 0 ? (
+                  <div className="space-y-3.5">
+                    {sampleCases.slice(0, 3).map((sc, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-[#0b0e17] border border-white/[0.08] rounded-2xl p-4.5 space-y-2 text-xs font-mono shadow-sm"
+                      >
+                        <div className="text-xs font-bold text-slate-200 font-sans mb-1">
+                          Example {idx + 1}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-[#0b0e17] border border-white/[0.08] rounded-2xl p-4 text-xs text-slate-400">
-                  Refer to the problem description for sample input and output structure.
-                </div>
-              )}
-            </div>
+                        <div className="text-slate-300">
+                          <strong className="text-slate-400 font-sans">Input: </strong>
+                          <span className="text-indigo-200 whitespace-pre-wrap">{sc.input}</span>
+                        </div>
+                        <div className="text-slate-300">
+                          <strong className="text-slate-400 font-sans">Output: </strong>
+                          <span className="text-emerald-300 whitespace-pre-wrap">{sc.expected_output}</span>
+                        </div>
+                        {sc.explanation && (
+                          <div className="text-slate-400 font-sans text-[11px] pt-1">
+                            <strong>Explanation: </strong>
+                            <span>{sc.explanation}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-[#0b0e17] border border-white/[0.08] rounded-2xl p-4 text-xs text-slate-400">
+                    Refer to the problem description for sample input and output structure.
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* Constraints */}
-            <div className="space-y-3 pt-2">
-              <h2 className="text-sm font-bold text-white tracking-tight uppercase">Constraints</h2>
-              <ul className="space-y-1.5 text-xs text-slate-400 font-mono list-disc list-inside">
-                <li>2 &lt;= nums.length &lt;= 10^4</li>
-                <li>-10^9 &lt;= nums[i] &lt;= 10^9</li>
-                <li>-10^9 &lt;= target &lt;= 10^9</li>
-                <li>Only one valid answer exists.</li>
-              </ul>
-            </div>
+            {/* Fallback Constraints (only shown if not provided in markdown description) */}
+            {!prob.description?.toLowerCase().includes("constraint") && (
+              <div className="space-y-3 pt-2">
+                <h2 className="text-sm font-bold text-white tracking-tight uppercase">Constraints</h2>
+                <ul className="space-y-1.5 text-xs text-slate-400 font-mono list-disc list-inside">
+                  <li>Refer to problem statement for input/output constraints.</li>
+                </ul>
+              </div>
+            )}
 
             {/* Helpful Tip Card */}
-            <div className="rounded-2xl border border-indigo-500/25 bg-gradient-to-r from-indigo-950/30 to-purple-950/20 p-4.5 flex items-start gap-3.5 shadow-sm">
-              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-              <div>
-                <div className="text-xs font-bold text-white tracking-wide mb-0.5">Tip</div>
-                <div className="text-xs text-slate-400 leading-relaxed font-sans">
-                  A simple hash map can help you solve this in O(n) time with optimal space efficiency.
+            {prob.title?.toLowerCase().includes("two sum") && (
+              <div className="rounded-2xl border border-indigo-500/25 bg-gradient-to-r from-indigo-950/30 to-purple-950/20 p-4.5 flex items-start gap-3.5 shadow-sm">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white tracking-wide mb-0.5">Tip</div>
+                  <div className="text-xs text-slate-400 leading-relaxed font-sans">
+                    A simple hash map can help you solve this in O(n) time with optimal space efficiency.
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -754,173 +758,186 @@ export default function ProblemDetailPage() {
         {/* ========================================================= */}
         <div
           onPointerDown={() => setIsDraggingH(true)}
-          className={`hidden lg:flex w-1.5 hover:w-2 bg-[#07090e] hover:bg-indigo-500/40 cursor-col-resize items-center justify-center transition-all z-20 shrink-0 select-none ${isDraggingH ? "bg-indigo-500 w-2" : "border-r border-white/[0.08]"
-            }`}
+          className={`hidden lg:flex w-2 cursor-col-resize items-center justify-center transition-all z-20 shrink-0 select-none py-6 group ${
+            isDraggingH ? "w-2" : ""
+          }`}
           title="Drag to resize panel"
         >
-          <div className="w-0.5 h-8 bg-slate-600 rounded-full" />
+          <div
+            className={`w-1 h-8 rounded-full transition-all ${
+              isDraggingH
+                ? "bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.9)] w-1.5"
+                : "bg-slate-700/50 group-hover:bg-indigo-400 group-hover:w-1.5"
+            }`}
+          />
         </div>
 
         {/* ========================================================= */}
         {/* RIGHT PANEL: EDITOR (TOP) + RESIZABLE TESTCASES (BOTTOM)  */}
         {/* ========================================================= */}
-        <div ref={rightPanelRef} className="flex-1 min-h-0 flex flex-col bg-[#07090e] overflow-hidden">
-          {/* Top Bar: Language Tabs / Selector + Run & Submit Buttons */}
-          <div className="h-13 bg-[#0a0d14] border-b border-white/[0.08] px-4 flex items-center justify-between shrink-0 z-20">
-            {/* Left: Language Selection Tabs with PNG icons */}
-            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-1 scrollbar-none">
-              {SUPPORTED_LANGS.slice(0, 4).map((lang) => {
-                const isSelected = language === lang.id;
-                return (
-                  <button
-                    key={lang.id}
-                    onClick={() => handleLanguageChange(lang.id)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isSelected
-                        ? "bg-[#111628] text-white border border-indigo-500/50 shadow-sm shadow-indigo-500/20"
-                        : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
-                      }`}
-                  >
-                    <Image
-                      src={lang.icon}
-                      alt={lang.name}
-                      width={16}
-                      height={16}
-                      className="w-4 h-4 object-contain"
-                    />
-                    <span>{lang.name}</span>
-                  </button>
-                );
-              })}
+        <div
+          ref={rightPanelRef}
+          className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
+        >
+          {/* Top Card: Monaco Editor */}
+          <div className="flex-1 min-h-0 flex flex-col bg-[#0a0d14] border border-white/[0.08] rounded-2xl shadow-lg shadow-black/40 overflow-hidden relative hover:border-white/[0.14] transition-colors">
+            {/* Top Bar: Language Tabs / Selector + Run & Submit Buttons */}
+            <div className="h-10 sm:h-11 bg-[#0d121f] border-b border-white/[0.08] px-3 sm:px-3.5 flex items-center justify-between shrink-0 z-20">
+              {/* Left: Language Selection Tabs with PNG icons */}
+              <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                {SUPPORTED_LANGS.slice(0, 4).map((lang) => {
+                  const isSelected = language === lang.id;
+                  return (
+                    <button
+                      key={lang.id}
+                      onClick={() => handleLanguageChange(lang.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${isSelected
+                          ? "bg-[#111628] text-white border border-indigo-500/50 shadow-xs"
+                          : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+                        }`}
+                    >
+                      <Image
+                        src={lang.icon}
+                        alt={lang.name}
+                        width={14}
+                        height={14}
+                        className="w-3.5 h-3.5 object-contain"
+                      />
+                      <span>{lang.name}</span>
+                    </button>
+                  );
+                })}
 
-              {/* Language Dropdown for Additional Languages (C, etc.) */}
-              <div className="relative">
+                {/* Language Dropdown for Additional Languages (C, etc.) */}
+                <div className="relative">
+                  <button
+                    onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                    className="px-2 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-colors flex items-center gap-1"
+                    title="More languages"
+                  >
+                    <span>▼</span>
+                  </button>
+
+                  {langDropdownOpen && (
+                    <div className="absolute left-0 mt-1.5 w-44 bg-[#0e1322] border border-white/10 rounded-xl shadow-2xl py-1 z-50 backdrop-blur-xl">
+                      {SUPPORTED_LANGS.map((lang) => (
+                        <button
+                          key={lang.id}
+                          onClick={() => handleLanguageChange(lang.id)}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors ${language === lang.id
+                              ? "bg-indigo-600/20 text-indigo-300 font-semibold"
+                              : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
+                            }`}
+                        >
+                          <Image
+                            src={lang.icon}
+                            alt={lang.name}
+                            width={14}
+                            height={14}
+                            className="w-3.5 h-3.5 object-contain"
+                          />
+                          <span>{lang.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Reset, Run & Submit Action Buttons */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {/* Reset to starter template */}
                 <button
-                  onClick={() => setLangDropdownOpen(!langDropdownOpen)}
-                  className="px-2 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-colors flex items-center gap-1"
-                  title="More languages"
+                  onClick={handleResetCode}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#0e1322] hover:bg-[#141b2c] border border-white/10 text-xs font-medium text-slate-300 hover:text-white transition-all shadow-xs"
+                  title="Reset code to starter template"
                 >
-                  <span>▼</span>
+                  <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="hidden sm:inline">Reset</span>
                 </button>
 
-                {langDropdownOpen && (
-                  <div className="absolute left-0 mt-1.5 w-44 bg-[#0e1322] border border-white/10 rounded-xl shadow-2xl py-1 z-50 backdrop-blur-xl">
-                    {SUPPORTED_LANGS.map((lang) => (
-                      <button
-                        key={lang.id}
-                        onClick={() => handleLanguageChange(lang.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors ${language === lang.id
-                            ? "bg-indigo-600/20 text-indigo-300 font-semibold"
-                            : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
-                          }`}
-                      >
-                        <Image
-                          src={lang.icon}
-                          alt={lang.name}
-                          width={16}
-                          height={16}
-                          className="w-4 h-4 object-contain"
-                        />
-                        <span>{lang.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {/* RUN BUTTON */}
+                <button
+                  onClick={() => handleExecute("run")}
+                  disabled={executing}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-sm shadow-indigo-600/30 active:scale-98 transition-all disabled:opacity-50"
+                >
+                  {executing && execMode === "run" ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Running...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                      </svg>
+                      <span>Run</span>
+                    </>
+                  )}
+                </button>
+
+                {/* SUBMIT BUTTON */}
+                <button
+                  onClick={() => handleExecute("submit")}
+                  disabled={executing}
+                  className="flex items-center gap-1.5 px-3.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm shadow-emerald-600/30 active:scale-98 transition-all disabled:opacity-50"
+                >
+                  {executing && execMode === "submit" ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Submit</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Right: Reset, Run & Submit Action Buttons */}
-            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-              {/* Reset to starter template */}
-              <button
-                onClick={handleResetCode}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0e1322] hover:bg-[#141b2c] border border-white/10 text-xs font-medium text-slate-300 hover:text-white transition-all shadow-sm"
-                title="Reset code to starter template"
-              >
-                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="hidden sm:inline">Reset</span>
-              </button>
-
-              {/* RUN BUTTON */}
-              <button
-                onClick={() => handleExecute("run")}
-                disabled={executing}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 active:scale-98 transition-all disabled:opacity-50"
-              >
-                {executing && execMode === "run" ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Running...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                    </svg>
-                    <span>Run</span>
-                  </>
-                )}
-              </button>
-
-              {/* SUBMIT BUTTON */}
-              <button
-                onClick={() => handleExecute("submit")}
-                disabled={executing}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/30 active:scale-98 transition-all disabled:opacity-50"
-              >
-                {executing && execMode === "submit" ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Submitting...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>Submit</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Monaco Editor Container */}
-          <div className="flex-1 min-h-0 relative flex flex-col bg-[#07090e]">
-            <div className={`flex-1 w-full min-h-0 ${isDraggingH || isDraggingV ? "pointer-events-none select-none" : ""}`}>
-              <MonacoEditor
-                height="100%"
-                language={currentLangObj.monacoLang}
-                theme="vs-dark"
-                value={code}
-                onChange={(val) => setCode(val || "")}
-                onMount={handleMonacoMount}
-                options={{
-                  fontSize: 13,
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                  minimap: { enabled: false },
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  lineNumbers: "on",
-                  tabSize: 4,
-                  wordWrap: "on",
-                  cursorBlinking: "smooth",
-                  smoothScrolling: true,
-                  padding: { top: 12, bottom: 12 },
-                }}
-              />
-            </div>
-
-            {/* Editor Bottom Status Bar */}
-            <div className="h-6 bg-[#0a0d14] border-t border-white/[0.06] px-4 flex items-center justify-between text-[11px] font-mono text-slate-500 shrink-0">
-              <div className="flex items-center gap-2">
-                <span>{currentLangObj.version}</span>
+            {/* Monaco Editor Container */}
+            <div className="flex-1 min-h-0 relative flex flex-col bg-[#0a0d14] overflow-hidden">
+              <div className={`flex-1 w-full min-h-0 ${isDraggingH || isDraggingV ? "pointer-events-none select-none" : ""}`}>
+                <MonacoEditor
+                  height="100%"
+                  language={currentLangObj.monacoLang}
+                  theme="vs-dark"
+                  value={code}
+                  onChange={(val) => setCode(val || "")}
+                  onMount={handleMonacoMount}
+                  options={{
+                    fontSize: 13,
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                    minimap: { enabled: false },
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    lineNumbers: "on",
+                    tabSize: 4,
+                    wordWrap: "on",
+                    cursorBlinking: "smooth",
+                    smoothScrolling: true,
+                    padding: { top: 10, bottom: 10 },
+                  }}
+                />
               </div>
-              <div className="flex items-center gap-4">
-                <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
-                <span>Spaces: 4</span>
-                <span>UTF-8</span>
+
+              {/* Editor Bottom Status Bar */}
+              <div className="h-5.5 bg-[#0d121f] border-t border-white/[0.06] px-3 flex items-center justify-between text-[11px] font-mono text-slate-500 shrink-0 select-none">
+                <div className="flex items-center gap-2">
+                  <span>{currentLangObj.version}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
+                  <span>Spaces: 4</span>
+                  <span>UTF-8</span>
+                </div>
               </div>
             </div>
           </div>
@@ -930,11 +947,18 @@ export default function ProblemDetailPage() {
           {/* ========================================================= */}
           <div
             onPointerDown={() => setIsDraggingV(true)}
-            className={`h-1.5 hover:h-2 bg-[#07090e] hover:bg-indigo-500/40 cursor-row-resize flex items-center justify-center transition-all z-20 shrink-0 select-none ${isDraggingV ? "bg-indigo-500 h-2" : "border-t border-white/[0.08]"
-              }`}
+            className={`h-2 w-full cursor-row-resize flex items-center justify-center transition-all z-20 shrink-0 select-none group ${
+              isDraggingV ? "h-2" : ""
+            }`}
             title="Drag to resize test-case panel"
           >
-            <div className="h-0.5 w-12 bg-slate-600 rounded-full" />
+            <div
+              className={`h-1 w-10 rounded-full transition-all ${
+                isDraggingV
+                  ? "bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.9)] h-1.5"
+                  : "bg-slate-700/50 group-hover:bg-indigo-400 group-hover:h-1.5"
+              }`}
+            />
           </div>
 
           {/* ========================================================= */}
@@ -944,13 +968,14 @@ export default function ProblemDetailPage() {
             style={{
               height: isTestcaseCollapsed ? "38px" : `${testcaseHeight}px`,
             }}
-            className={`flex flex-col bg-[#07090e] overflow-hidden relative shrink-0 ${isDraggingV ? "" : "transition-[height] duration-200 ease-out"
-              }`}
+            className={`flex flex-col bg-[#0a0d14] border border-white/[0.08] rounded-2xl shadow-lg shadow-black/40 overflow-hidden relative shrink-0 hover:border-white/[0.14] transition-colors ${
+              isDraggingV ? "" : "transition-[height] duration-200 ease-out"
+            }`}
           >
             {/* Header: Tabs + Actions (Add Test Case, Run All, Collapse) */}
-            <div className="h-10 bg-[#0a0d14] border-b border-white/[0.08] px-4 flex items-center justify-between shrink-0">
+            <div className="h-9.5 sm:h-10 bg-[#0d121f] border-b border-white/[0.08] px-3 sm:px-3.5 flex items-center justify-between shrink-0">
               {/* Left Tabs */}
-              <div className="flex items-center space-x-6 h-full">
+              <div className="flex items-center space-x-5 h-full">
                 {/* Tab: Test Cases */}
                 <button
                   onClick={() => {
@@ -1056,12 +1081,12 @@ export default function ProblemDetailPage() {
 
             {/* Test Case Content Body (hidden when collapsed) */}
             {!isTestcaseCollapsed && (
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 select-text font-mono text-xs scrollbar-thin">
+              <div className="flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 select-text font-mono text-xs scrollbar-thin">
                 {/* ──────────────── TAB 1: STRUCTURED TEST CASES TABLE ──────────────── */}
                 {activeTab === "testcases" && (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {/* Table Header */}
-                    <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-[11px] font-sans font-semibold text-slate-400 uppercase tracking-wider border-b border-white/[0.06]">
+                    <div className="grid grid-cols-12 gap-2 px-2.5 py-1 text-[10px] font-sans font-semibold text-slate-400 uppercase tracking-wider border-b border-white/[0.06]">
                       <div className="col-span-1 text-center">#</div>
                       <div className="col-span-5">Input</div>
                       <div className="col-span-3">Expected Output</div>
@@ -1076,12 +1101,12 @@ export default function ProblemDetailPage() {
                         execResult?.testCasesList?.[idx] || null;
 
                       let statusBadge = (
-                        <span className="text-[11px] text-slate-400">Ready</span>
+                        <span className="text-[10px] text-slate-400">Ready</span>
                       );
 
                       if (executing) {
                         statusBadge = (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-indigo-400 animate-pulse">
+                          <span className="inline-flex items-center gap-1 text-[10px] text-indigo-400 animate-pulse">
                             <span>Running</span>
                           </span>
                         );
@@ -1091,11 +1116,11 @@ export default function ProblemDetailPage() {
                           resultCase.status === "passed" ||
                           resultCase.status === "accepted";
                         statusBadge = passed ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/50">
                             <span>✓</span> Passed
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold text-rose-400 bg-rose-950/40 border border-rose-800/50">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-rose-400 bg-rose-950/40 border border-rose-800/50">
                             <span>✗</span> Failed
                           </span>
                         );
@@ -1107,26 +1132,26 @@ export default function ProblemDetailPage() {
                           onClick={() =>
                             setExpandedCaseId(isExpanded ? null : tc.displayIdx)
                           }
-                          className={`rounded-xl border transition-all cursor-pointer ${isExpanded
-                              ? "bg-[#0d1222] border-indigo-500/40 shadow-md"
+                          className={`rounded-lg border transition-all cursor-pointer ${isExpanded
+                              ? "bg-[#0d1222] border-indigo-500/40 shadow-sm"
                               : "bg-[#0b0e17] hover:bg-[#0e1322] border-white/[0.06]"
                             }`}
                         >
                           {/* Row Summary */}
-                          <div className="grid grid-cols-12 gap-2 px-3 py-2.5 items-center">
-                            <div className="col-span-1 text-center font-bold text-slate-400">
+                          <div className="grid grid-cols-12 gap-2 px-2.5 py-1.5 items-center">
+                            <div className="col-span-1 text-center font-bold text-slate-400 text-xs">
                               {tc.displayIdx}
                             </div>
-                            <div className="col-span-5 text-indigo-200 truncate pr-2 font-mono">
+                            <div className="col-span-5 text-indigo-200 truncate pr-2 font-mono text-xs">
                               {tc.input}
                             </div>
-                            <div className="col-span-3 text-emerald-300 truncate pr-2 font-mono">
+                            <div className="col-span-3 text-emerald-300 truncate pr-2 font-mono text-xs">
                               {tc.expected_output || "(any)"}
                             </div>
                             <div className="col-span-2 text-center">
                               {statusBadge}
                             </div>
-                            <div className="col-span-1 text-right flex items-center justify-end gap-1.5">
+                            <div className="col-span-1 text-right flex items-center justify-end gap-1">
                               {tc.isCustom && (
                                 <button
                                   onClick={(e) => handleRemoveCustomCase(tc.id, e)}
@@ -1147,13 +1172,13 @@ export default function ProblemDetailPage() {
 
                           {/* Expanded Details */}
                           {isExpanded && (
-                            <div className="px-4 pb-4 pt-1 border-t border-white/[0.06] space-y-3 bg-[#080b13] rounded-b-xl">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                            <div className="px-3 pb-3 pt-1 border-t border-white/[0.06] space-y-2 bg-[#080b13] rounded-b-lg">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1.5">
                                 <div>
                                   <span className="text-[10px] uppercase font-sans font-bold text-slate-400 block mb-1">
                                     Input
                                   </span>
-                                  <pre className="p-2.5 rounded-lg bg-[#05070c] border border-white/[0.06] text-slate-200 whitespace-pre-wrap">
+                                  <pre className="p-2 rounded-lg bg-[#05070c] border border-white/[0.06] text-slate-200 text-xs whitespace-pre-wrap">
                                     {tc.input}
                                   </pre>
                                 </div>
@@ -1161,7 +1186,7 @@ export default function ProblemDetailPage() {
                                   <span className="text-[10px] uppercase font-sans font-bold text-slate-400 block mb-1">
                                     Expected Output
                                   </span>
-                                  <pre className="p-2.5 rounded-lg bg-[#05070c] border border-white/[0.06] text-emerald-300 whitespace-pre-wrap">
+                                  <pre className="p-2 rounded-lg bg-[#05070c] border border-white/[0.06] text-emerald-300 text-xs whitespace-pre-wrap">
                                     {tc.expected_output || "(none)"}
                                   </pre>
                                 </div>
@@ -1169,28 +1194,28 @@ export default function ProblemDetailPage() {
 
                               {/* If test case has run results */}
                               {resultCase && (
-                                <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                                <div className="space-y-1.5 pt-1.5 border-t border-white/[0.06]">
                                   <div>
-                                    <span className="text-[10px] uppercase font-sans font-bold text-slate-400 block mb-1">
+                                    <span className="text-[10px] uppercase font-sans font-bold text-slate-400 block mb-0.5">
                                       Your Output
                                     </span>
-                                    <pre className="p-2.5 rounded-lg bg-[#05070c] border border-white/[0.06] text-indigo-200 whitespace-pre-wrap">
+                                    <pre className="p-2 rounded-lg bg-[#05070c] border border-white/[0.06] text-indigo-200 text-xs whitespace-pre-wrap">
                                       {resultCase.actual_output || resultCase.output || "(no output)"}
                                     </pre>
                                   </div>
 
                                   {resultCase.stdout && (
                                     <div>
-                                      <span className="text-[10px] uppercase font-sans font-bold text-slate-400 block mb-1">
+                                      <span className="text-[10px] uppercase font-sans font-bold text-slate-400 block mb-0.5">
                                         Standard Output / Logs
                                       </span>
-                                      <pre className="p-2.5 rounded-lg bg-[#05070c] border border-white/[0.06] text-slate-300 whitespace-pre-wrap">
+                                      <pre className="p-2 rounded-lg bg-[#05070c] border border-white/[0.06] text-slate-300 text-xs whitespace-pre-wrap">
                                         {resultCase.stdout}
                                       </pre>
                                     </div>
                                   )}
 
-                                  <div className="flex items-center gap-4 text-[11px] text-slate-400 font-mono pt-1">
+                                  <div className="flex items-center gap-3 text-[10px] text-slate-400 font-mono pt-0.5">
                                     {resultCase.time_taken !== undefined && (
                                       <span>Runtime: {resultCase.time_taken}s</span>
                                     )}
@@ -1221,18 +1246,18 @@ export default function ProblemDetailPage() {
                     </div>
 
                     <textarea
-                      rows={5}
+                      rows={4}
                       value={customInputText}
                       onChange={(e) => setCustomInputText(e.target.value)}
                       placeholder="Enter raw input data to pass directly to stdin (e.g. 5\n1 2 3 4 5)..."
-                      className="w-full bg-[#080b13] border border-white/10 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-inner"
+                      className="w-full bg-[#080b13] border border-white/10 rounded-lg p-2.5 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-inner"
                     />
 
                     <div className="flex justify-end">
                       <button
                         onClick={() => handleExecute("run")}
                         disabled={executing}
-                        className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all flex items-center gap-1.5"
+                        className="px-3.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm shadow-indigo-600/30 transition-all flex items-center gap-1.5"
                       >
                         <span>▷ Run with Custom Input</span>
                       </button>
@@ -1242,12 +1267,12 @@ export default function ProblemDetailPage() {
 
                 {/* ──────────────── TAB 3: EXECUTION RESULTS ──────────────── */}
                 {activeTab === "result" && execResult && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {/* Execution Header Banner */}
-                    <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl border bg-[#0b0e17] border-white/10">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-between p-2.5 rounded-lg border bg-[#0b0e17] border-white/10">
+                      <div className="flex items-center gap-2.5">
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${execResult.status === "accepted" ||
+                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${execResult.status === "accepted" ||
                               execResult.status === "completed"
                               ? "bg-emerald-950/60 border border-emerald-700 text-emerald-300"
                               : "bg-rose-950/60 border border-rose-700 text-rose-300"
@@ -1263,7 +1288,7 @@ export default function ProblemDetailPage() {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-4 text-xs font-mono">
+                      <div className="flex items-center gap-3 text-xs font-mono">
                         {execResult.time_taken !== undefined && (
                           <span className="text-slate-400">
                             Runtime:{" "}
@@ -1286,11 +1311,11 @@ export default function ProblemDetailPage() {
 
                     {/* Stderr / Compilation Error */}
                     {execResult.error && (
-                      <div className="space-y-1.5">
-                        <div className="text-xs font-semibold text-rose-400 font-sans uppercase">
+                      <div className="space-y-1">
+                        <div className="text-[11px] font-semibold text-rose-400 font-sans uppercase">
                           Error / Diagnostics
                         </div>
-                        <pre className="p-3 bg-rose-950/20 border border-rose-800/50 rounded-xl text-xs font-mono text-rose-300 whitespace-pre-wrap overflow-x-auto">
+                        <pre className="p-2.5 bg-rose-950/20 border border-rose-800/50 rounded-lg text-xs font-mono text-rose-300 whitespace-pre-wrap overflow-x-auto">
                           {execResult.error}
                         </pre>
                       </div>
