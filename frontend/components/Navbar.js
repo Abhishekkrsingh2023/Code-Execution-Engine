@@ -1,16 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
+
+const emptySubscribe = () => () => {};
 
 export default function Navbar() {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
   // Close menus when route changes (React recommended pattern without cascading render)
   const [prevPathname, setPrevPathname] = useState(pathname);
@@ -38,7 +45,7 @@ export default function Navbar() {
   }
 
   const isModeratorOrAdmin =
-    !loading && (user?.role === "admin" || user?.role === "moderator");
+    mounted && !loading && (user?.role === "admin" || user?.role === "moderator");
 
   const navLinks = [
     { name: "Problems", href: "/problems" },
@@ -46,7 +53,7 @@ export default function Navbar() {
     { name: "About", href: "/about" },
   ];
 
-  if (!loading && user) {
+  if (mounted && !loading && user) {
     navLinks.push({ name: "Profile", href: "/profile" });
   }
 
@@ -72,25 +79,13 @@ export default function Navbar() {
     : "U";
 
   return (
-    <nav
-      className={`sticky top-0 z-50 ${
-        isProblemDetail
-          ? "px-2 pt-2 pb-0 bg-[#07090e]"
-          : "backdrop-blur-md bg-[#07090e]/85 border-b border-white/[0.08]"
-      }`}
-    >
+    <nav className="sticky top-0 z-50 px-2 sm:px-4 pt-2 pb-0 bg-[#07090e]/80 backdrop-blur-sm">
       <div
         className={`${
-          isProblemDetail
-            ? "w-full px-3.5 sm:px-4 rounded-2xl bg-[#0a0d14] border border-white/[0.08] shadow-lg shadow-black/40 hover:border-white/[0.14] transition-colors"
-            : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-        }`}
+          isProblemDetail ? "w-full" : "max-w-7xl mx-auto"
+        } px-3.5 sm:px-4 rounded-2xl bg-[#0a0d14]/90 backdrop-blur-md border border-white/[0.08] shadow-lg shadow-black/40 hover:border-white/[0.14] transition-colors`}
       >
-        <div
-          className={`relative flex items-center justify-between ${
-            isProblemDetail ? "h-10 sm:h-11" : "h-16"
-          }`}
-        >
+        <div className="relative flex items-center justify-between h-11 sm:h-12">
           {/* Left: Brand Logo */}
           <div className="flex items-center shrink-0">
             <Link
@@ -102,14 +97,14 @@ export default function Navbar() {
                 alt="Code0 Logo"
                 width={56}
                 height={32}
-                className={`${isProblemDetail ? "h-6" : "h-8"} w-auto object-contain transition-transform duration-200 group-hover:scale-105`}
+                className="h-6 sm:h-6.5 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
                 priority
               />
             </Link>
           </div>
 
           {/* Center: Desktop Navigation Links */}
-          <div className="hidden md:flex items-center space-x-8 absolute left-1/2 -translate-x-1/2">
+          <div className="hidden md:flex items-center space-x-7 sm:space-x-8 absolute left-1/2 -translate-x-1/2">
             {navLinks.map((link) => {
               const active = isLinkActive(link.href);
 
@@ -117,7 +112,7 @@ export default function Navbar() {
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`relative ${isProblemDetail ? "py-3.5" : "py-5"} text-sm font-medium transition-colors ${
+                  className={`relative py-3 text-xs sm:text-sm font-medium transition-colors ${
                     active
                       ? "text-white font-semibold"
                       : "text-slate-400 hover:text-white"
@@ -144,8 +139,8 @@ export default function Navbar() {
             </div>
 
             {/* User Profile Avatar / Dropdown */}
-            {loading ? (
-              <div className="w-8 h-8 rounded-full bg-slate-800 animate-pulse" />
+            {!mounted || loading ? (
+              <div className="w-8 h-8 rounded-full bg-white/[0.05] animate-pulse" />
             ) : user ? (
               <div className="relative" id="user-dropdown-container">
                 <button
@@ -277,7 +272,7 @@ export default function Navbar() {
               </Link>
             );
           })}
-          {user ? (
+          {mounted && user ? (
             <div className="pt-2 border-t border-white/[0.08] mt-2 space-y-1">
               <div className="px-3 py-1.5 text-xs text-slate-400">
                 Signed in as{" "}
@@ -296,7 +291,7 @@ export default function Navbar() {
                 Logout
               </button>
             </div>
-          ) : (
+          ) : mounted ? (
             <div className="pt-2 flex gap-2 border-t border-white/[0.08] mt-2">
               <Link
                 href="/login"
@@ -313,7 +308,7 @@ export default function Navbar() {
                 Register
               </Link>
             </div>
-          )}
+          ) : null}
         </div>
       )}
     </nav>

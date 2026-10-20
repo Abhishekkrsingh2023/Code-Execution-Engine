@@ -141,27 +141,31 @@ export default function LeaderboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full flex-1">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full border border-indigo-500/30 bg-indigo-950/30 text-[11px] font-semibold text-indigo-300 mb-2 shadow-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+            <span>Global Standings</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Leaderboard
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
             Global competitive rankings for users based on points and verified problem solutions.
           </p>
         </div>
 
         {/* Current user rank summary pill */}
         {myRank && (
-          <div className="bg-[#111622] border border-blue-500/40 rounded-2xl p-4 flex items-center space-x-4 shadow-md">
-            <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black text-sm">
+          <div className="bg-[#0a0d14] border border-indigo-500/40 rounded-2xl p-3.5 flex items-center space-x-3.5 shadow-lg shadow-black/40">
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-black text-xs">
               #{myRank.rank}
             </div>
             <div>
-              <div className="text-xs text-slate-400">Your Standing</div>
-              <div className="text-sm font-bold text-white flex items-center space-x-2">
+              <div className="text-[11px] text-slate-400 font-medium">Your Standing</div>
+              <div className="text-xs sm:text-sm font-bold text-white flex items-center space-x-2">
                 <span>{myRank.username}</span>
-                <span className="text-blue-400 font-mono">
+                <span className="text-indigo-400 font-mono">
                   ({myRank.total_score} pts)
                 </span>
               </div>
@@ -171,26 +175,26 @@ export default function LeaderboardPage() {
       </div>
 
       {/* Top Controls Bar */}
-      <div className="bg-[#111622] border border-slate-800 rounded-2xl p-4 mb-6 shadow-sm flex items-center justify-between">
+      <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl p-3 sm:p-3.5 mb-5 shadow-lg shadow-black/40 hover:border-white/[0.12] transition-colors flex items-center justify-between">
         <div className="flex items-center space-x-2 text-xs text-slate-400">
           <span>Total Ranked Competitors:</span>
-          <span className="font-semibold text-white font-mono bg-slate-800/80 px-2.5 py-0.5 rounded-lg border border-slate-700/50">
+          <span className="font-bold text-white font-mono bg-white/[0.04] px-2.5 py-0.5 rounded-lg border border-white/10">
             {total}
           </span>
         </div>
 
         {/* Page size selector */}
         <div className="flex items-center space-x-2 text-xs text-slate-400">
-          <span>Rows per page:</span>
-          <div className="inline-flex rounded-lg bg-[#0b0f17] p-1 border border-slate-800">
+          <span className="hidden sm:inline">Rows per page:</span>
+          <div className="inline-flex rounded-xl bg-[#080b13] p-1 border border-white/10">
             {PAGE_SIZE_OPTIONS.map((size) => (
               <button
                 key={size}
                 type="button"
                 onClick={() => handlePageSizeChange(size)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`px-2.5 py-0.5 rounded-lg text-xs font-medium transition-all ${
                   pageSize === size
-                    ? "bg-blue-600 text-white shadow-sm"
+                    ? "bg-indigo-600 text-white shadow-xs font-semibold"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -203,11 +207,11 @@ export default function LeaderboardPage() {
 
       {/* Error state */}
       {error && (
-        <div className="mb-6 p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-sm flex items-center justify-between">
+        <div className="mb-5 p-3.5 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs sm:text-sm flex items-center justify-between">
           <span>{error}</span>
           <button
             onClick={() => setReloadTrigger((t) => t + 1)}
-            className="px-3 py-1 bg-rose-900/60 hover:bg-rose-900 rounded text-xs text-white"
+            className="px-3 py-1 bg-rose-900/60 hover:bg-rose-900 rounded-lg text-xs text-white"
           >
             Retry
           </button>
@@ -217,7 +221,7 @@ export default function LeaderboardPage() {
       {/* Leaderboard Table */}
       <div
         ref={tableContainerRef}
-        className="bg-[#111622] border border-slate-800 rounded-2xl overflow-hidden shadow-lg relative"
+        className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl overflow-hidden shadow-xl shadow-black/40 hover:border-white/[0.12] transition-colors relative"
       >
         {/* Subtle loading overlay during pagination */}
         {isPaginating && (
@@ -260,15 +264,15 @@ export default function LeaderboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider bg-[#0e131d]/60">
-                  <th className="py-3.5 px-4 w-20 text-center">Rank</th>
-                  <th className="py-3.5 px-4">Competitor</th>
-                  <th className="py-3.5 px-4 text-right">Problems Solved</th>
-                  <th className="py-3.5 px-4 text-right">Attempts</th>
-                  <th className="py-3.5 px-4 text-right">Total Score</th>
+                <tr className="border-b border-white/[0.08] text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-[#0d121f]">
+                  <th className="py-3 px-4 w-20 text-center">Rank</th>
+                  <th className="py-3 px-4">Competitor</th>
+                  <th className="py-3 px-4 text-right">Problems Solved</th>
+                  <th className="py-3 px-4 text-right">Attempts</th>
+                  <th className="py-3 px-4 text-right">Total Score</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/50 text-sm">
+              <tbody className="divide-y divide-white/[0.06] text-xs sm:text-sm">
                 {users.map((entry) => {
                   const isCurrentUser =
                     user?.id === entry.user_id ||
@@ -279,25 +283,25 @@ export default function LeaderboardPage() {
                       key={entry.user_id || entry.username}
                       className={`transition-colors ${
                         isCurrentUser
-                          ? "bg-blue-950/30 border-l-4 border-l-blue-500 font-medium"
-                          : "hover:bg-slate-800/30"
+                          ? "bg-indigo-950/20 border-l-4 border-l-indigo-500 font-medium"
+                          : "hover:bg-white/[0.03]"
                       }`}
                     >
                       {/* Rank Badge */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-4 text-center">
                         <div className="flex justify-center">
                           {renderRankBadge(entry.rank)}
                         </div>
                       </td>
 
                       {/* Username */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-slate-100">
                             {entry.username}
                           </span>
                           {isCurrentUser && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-600/30 border border-blue-500/50 text-blue-300 font-bold uppercase tracking-wider">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-600/30 border border-indigo-500/50 text-indigo-300 font-bold uppercase tracking-wider">
                               You
                             </span>
                           )}
@@ -305,17 +309,17 @@ export default function LeaderboardPage() {
                       </td>
 
                       {/* Problems Solved */}
-                      <td className="py-3.5 px-4 text-right font-mono text-slate-300">
+                      <td className="py-3 px-4 text-right font-mono text-emerald-400 font-semibold">
                         {entry.problems_solved}
                       </td>
 
                       {/* Submissions count */}
-                      <td className="py-3.5 px-4 text-right font-mono text-slate-400 text-xs">
+                      <td className="py-3 px-4 text-right font-mono text-slate-400 text-xs">
                         {entry.submissions_count || 0}
                       </td>
 
                       {/* Total Score */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-400">
+                      <td className="py-3 px-4 text-right font-mono font-bold text-indigo-300">
                         {entry.total_score.toFixed(1)}
                       </td>
                     </tr>
@@ -331,7 +335,7 @@ export default function LeaderboardPage() {
         )}
 
         {/* Pagination Bar */}
-        <div className="p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+        <div className="p-3.5 border-t border-white/[0.08] bg-[#0d121f]/50 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <div>
             Showing <span className="text-white font-semibold">{startItem}</span> to{" "}
             <span className="text-white font-semibold">{endItem}</span> of{" "}
@@ -343,7 +347,7 @@ export default function LeaderboardPage() {
             <button
               disabled={page === 0 || loading || isPaginating}
               onClick={() => handlePageChange(0)}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800/80 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="px-2.5 py-1 rounded-lg bg-[#0e1322] hover:bg-[#141b2c] border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs"
               title="First Page"
             >
               «
@@ -353,7 +357,7 @@ export default function LeaderboardPage() {
             <button
               disabled={page === 0 || loading || isPaginating}
               onClick={() => handlePageChange(page - 1)}
-              className="px-3 py-1.5 rounded-lg bg-slate-800/80 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="px-3 py-1 rounded-lg bg-[#0e1322] hover:bg-[#141b2c] border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs"
             >
               Previous
             </button>
@@ -374,10 +378,10 @@ export default function LeaderboardPage() {
                     key={item}
                     disabled={loading || isPaginating}
                     onClick={() => handlePageChange(item)}
-                    className={`min-w-8 h-8 px-2 rounded-lg font-medium text-xs transition-all ${
+                    className={`min-w-7 h-7 px-2 rounded-lg font-medium text-xs transition-all ${
                       isActive
-                        ? "bg-blue-600 text-white font-bold ring-2 ring-blue-400/40 shadow-sm"
-                        : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/80"
+                        ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-xs"
+                        : "bg-[#0e1322] hover:bg-[#141b2c] border border-white/10 text-slate-300 hover:text-white"
                     }`}
                   >
                     {item + 1}
@@ -390,7 +394,7 @@ export default function LeaderboardPage() {
             <button
               disabled={page >= totalPages - 1 || loading || isPaginating}
               onClick={() => handlePageChange(page + 1)}
-              className="px-3 py-1.5 rounded-lg bg-slate-800/80 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="px-3 py-1 rounded-lg bg-[#0e1322] hover:bg-[#141b2c] border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs"
             >
               Next
             </button>
@@ -399,7 +403,7 @@ export default function LeaderboardPage() {
             <button
               disabled={page >= totalPages - 1 || loading || isPaginating}
               onClick={() => handlePageChange(totalPages - 1)}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800/80 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              className="px-2.5 py-1 rounded-lg bg-[#0e1322] hover:bg-[#141b2c] border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs"
               title="Last Page"
             >
               »

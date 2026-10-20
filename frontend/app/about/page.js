@@ -128,7 +128,7 @@ export default function AboutPage() {
             </Link>
             <Link
               href="/leaderboard"
-              className="px-6 py-3 rounded-xl bg-[#0e1322] border border-white/10 hover:border-white/20 text-slate-300 hover:text-white font-semibold text-sm transition-all"
+              className="px-6 py-3 rounded-xl bg-[#0a0d14] border border-white/[0.08] hover:border-white/20 text-slate-300 hover:text-white font-semibold text-sm transition-all shadow-sm shadow-black/40"
             >
               View Leaderboard
             </Link>
@@ -150,9 +150,9 @@ export default function AboutPage() {
             {PLATFORM_HIGHLIGHTS.map((item, index) => (
               <div
                 key={index}
-                className="bg-[#0e1322]/80 border border-white/[0.08] rounded-2xl p-6 hover:border-indigo-500/30 transition-all duration-300 hover:-translate-y-1 group"
+                className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl p-6 hover:border-white/[0.16] shadow-lg shadow-black/40 transition-all duration-300 hover:-translate-y-1 group"
               >
-                <div className="p-3 w-fit rounded-xl bg-[#07090e] border border-white/10 mb-4 group-hover:scale-110 transition-transform">
+                <div className="p-3 w-fit rounded-xl bg-[#080b13] border border-white/10 mb-4 group-hover:scale-110 transition-transform">
                   {item.icon}
                 </div>
                 <h3 className="text-base font-bold text-white mb-2">{item.title}</h3>
@@ -183,12 +183,12 @@ export default function AboutPage() {
             {TEAM_MEMBERS.map((member) => (
               <div
                 key={member.id}
-                className="bg-[#0e1322]/90 border border-white/[0.08] hover:border-indigo-500/40 rounded-3xl p-6 sm:p-8 transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/10 flex flex-col justify-between group"
+                className="bg-[#0a0d14] border border-white/[0.08] hover:border-white/[0.16] rounded-2xl p-6 sm:p-8 transition-all duration-300 shadow-xl shadow-black/40 hover:shadow-indigo-500/10 flex flex-col justify-between group"
               >
                 <div className="space-y-6">
                   {/* Developer Card Header */}
                   <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                    <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-indigo-500/30 group-hover:border-indigo-400 transition-colors shrink-0 shadow-lg shadow-indigo-950/50">
+                    <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border border-white/[0.12] group-hover:border-indigo-400/50 transition-colors shrink-0 shadow-lg shadow-black/60">
                       <Image
                         src={member.image}
                         alt={`${member.name} avatar`}
@@ -243,7 +243,7 @@ export default function AboutPage() {
                       {member.skills.map((skill, i) => (
                         <span
                           key={i}
-                          className="px-2.5 py-1 rounded-lg bg-[#07090e] border border-white/[0.08] text-[11px] text-slate-300 font-mono font-medium"
+                          className="px-2.5 py-1 rounded-lg bg-[#080b13] border border-white/[0.08] text-[11px] text-slate-300 font-mono font-medium"
                         >
                           {skill}
                         </span>
@@ -261,7 +261,7 @@ export default function AboutPage() {
                         href={member.socials.github}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-2 rounded-lg bg-[#07090e] border border-white/10 text-slate-400 hover:text-white hover:border-indigo-500/50 transition-colors"
+                        className="p-2 rounded-lg bg-[#080b13] border border-white/10 text-slate-400 hover:text-white hover:border-indigo-500/50 transition-colors"
                         title="GitHub Profile"
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -272,7 +272,7 @@ export default function AboutPage() {
                     {member.socials.email && (
                       <a
                         href={member.socials.email}
-                        className="p-2 rounded-lg bg-[#07090e] border border-white/10 text-slate-400 hover:text-white hover:border-indigo-500/50 transition-colors"
+                        className="p-2 rounded-lg bg-[#080b13] border border-white/10 text-slate-400 hover:text-white hover:border-indigo-500/50 transition-colors"
                         title="Send Email"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -288,7 +288,7 @@ export default function AboutPage() {
         </section>
 
         {/* CALL TO ACTION BANNER */}
-        <section className="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-slate-900 border border-indigo-500/30 rounded-3xl p-8 sm:p-12 text-center space-y-6 shadow-2xl">
+        <section className="bg-gradient-to-r from-indigo-950/40 via-[#0a0d14] to-purple-950/30 border border-white/[0.08] rounded-2xl p-8 sm:p-12 text-center space-y-6 shadow-xl shadow-black/40">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Ready to test your algorithms?
           </h2>
@@ -298,13 +298,13 @@ export default function AboutPage() {
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link
               href="/problems"
-              className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-md shadow-indigo-600/30"
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm transition-all shadow-md shadow-indigo-600/30 active:scale-98"
             >
               Browse Problem Library
             </Link>
             <Link
               href="/register"
-              className="px-6 py-3 rounded-xl bg-[#0e1322] border border-white/10 hover:border-white/20 text-slate-200 hover:text-white font-semibold text-sm transition-all"
+              className="px-6 py-3 rounded-xl bg-[#0a0d14] border border-white/[0.08] hover:border-white/20 text-slate-200 hover:text-white font-semibold text-sm transition-all shadow-sm"
             >
               Create Account
             </Link>

@@ -129,10 +129,13 @@ export default function AdminPage() {
   }, [isAdmin]);
 
   useEffect(() => {
-    if (activeTab === "problems") fetchProblems();
-    if (activeTab === "users" && isAdmin) fetchUsers();
-    if (activeTab === "stats" && isAdmin) fetchStats();
-    if (activeTab === "audit" && isAdmin) fetchAuditLogs();
+    const timer = setTimeout(() => {
+      if (activeTab === "problems") fetchProblems();
+      if (activeTab === "users" && isAdmin) fetchUsers();
+      if (activeTab === "stats" && isAdmin) fetchStats();
+      if (activeTab === "audit" && isAdmin) fetchAuditLogs();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [activeTab, isAdmin, fetchProblems, fetchUsers, fetchStats, fetchAuditLogs]);
 
   // Handle Create or Update Problem
@@ -287,7 +290,7 @@ export default function AdminPage() {
               setFormError("");
               setShowCreateModal(true);
             }}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition-all flex items-center space-x-2 shrink-0"
+            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all flex items-center space-x-2 shrink-0 active:scale-98"
           >
             <span>+ Create Problem</span>
           </button>
@@ -295,12 +298,12 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs Bar */}
-      <div className="flex border-b border-slate-800 space-x-6">
+      <div className="flex border-b border-white/[0.08] space-x-6">
         <button
           onClick={() => setActiveTab("problems")}
           className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
             activeTab === "problems"
-              ? "border-blue-500 text-blue-400"
+              ? "border-indigo-500 text-indigo-400"
               : "border-transparent text-slate-400 hover:text-slate-200"
           }`}
         >
@@ -313,7 +316,7 @@ export default function AdminPage() {
               onClick={() => setActiveTab("users")}
               className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
                 activeTab === "users"
-                  ? "border-blue-500 text-blue-400"
+                  ? "border-indigo-500 text-indigo-400"
                   : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -324,7 +327,7 @@ export default function AdminPage() {
               onClick={() => setActiveTab("stats")}
               className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
                 activeTab === "stats"
-                  ? "border-blue-500 text-blue-400"
+                  ? "border-indigo-500 text-indigo-400"
                   : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -335,7 +338,7 @@ export default function AdminPage() {
               onClick={() => setActiveTab("audit")}
               className={`pb-3 text-sm font-semibold border-b-2 transition-colors ${
                 activeTab === "audit"
-                  ? "border-blue-500 text-blue-400"
+                  ? "border-indigo-500 text-indigo-400"
                   : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -349,18 +352,18 @@ export default function AdminPage() {
       {/* TAB 1: Problems Content */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       {activeTab === "problems" && (
-        <div className="bg-[#111622] border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+        <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl overflow-hidden shadow-lg shadow-black/40">
           {problemsLoading ? (
             <div className="p-8 space-y-4">
               {[1, 2, 3].map((n) => (
-                <div key={n} className="h-12 bg-slate-800/40 rounded-xl animate-pulse" />
+                <div key={n} className="h-12 bg-white/[0.04] rounded-xl animate-pulse" />
               ))}
             </div>
           ) : problems.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="bg-[#0e131d] text-slate-400 font-semibold text-xs uppercase tracking-wider border-b border-slate-800">
+                  <tr className="bg-[#0d121f] text-slate-400 font-semibold text-[11px] uppercase tracking-wider border-b border-white/[0.08]">
                     <th className="py-3 px-4 w-16">ID</th>
                     <th className="py-3 px-4">Title</th>
                     <th className="py-3 px-4">Difficulty</th>
@@ -369,9 +372,9 @@ export default function AdminPage() {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 text-xs">
+                <tbody className="divide-y divide-white/[0.06] text-xs">
                   {problems.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-800/30 transition-colors">
+                    <tr key={p.id} className="hover:bg-white/[0.03] transition-colors">
                       <td className="py-3 px-4 font-mono text-slate-400">{p.id}</td>
                       <td className="py-3 px-4 font-medium text-slate-100">
                         <a href={`/problems/${p.id}`} className="hover:underline">
@@ -431,7 +434,7 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="p-8 text-center text-slate-500 text-xs">
-              No problems found. Click "+ Create Problem" above to publish your first challenge!
+              No problems found. Click &ldquo;+ Create Problem&rdquo; above to publish your first challenge!
             </div>
           )}
         </div>
@@ -443,7 +446,7 @@ export default function AdminPage() {
       {activeTab === "users" && isAdmin && (
         <div className="space-y-4">
           {/* Filter Bar */}
-          <div className="bg-[#111622] border border-slate-800 rounded-2xl p-4 flex flex-wrap gap-3 items-center justify-between">
+          <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl p-4 flex flex-wrap gap-3 items-center justify-between shadow-lg shadow-black/40">
             <input
               type="text"
               placeholder="Search user by username or email..."
@@ -452,7 +455,7 @@ export default function AdminPage() {
                 setUserSearch(e.target.value);
                 setUsersPage(0);
               }}
-              className="bg-[#0b0f17] border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[240px]"
+              className="bg-[#080b13] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-w-[240px]"
             />
 
             <div className="flex items-center space-x-3">
@@ -462,7 +465,7 @@ export default function AdminPage() {
                   setUserRoleFilter(e.target.value);
                   setUsersPage(0);
                 }}
-                className="bg-[#0b0f17] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-slate-300"
+                className="bg-[#080b13] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="">All Roles</option>
                 <option value="user">User</option>
@@ -476,7 +479,7 @@ export default function AdminPage() {
                   setUserStatusFilter(e.target.value);
                   setUsersPage(0);
                 }}
-                className="bg-[#0b0f17] border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-slate-300"
+                className="bg-[#080b13] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="">All Statuses</option>
                 <option value="active">Active</option>
@@ -486,18 +489,18 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="bg-[#111622] border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+          <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl overflow-hidden shadow-lg shadow-black/40">
             {usersLoading ? (
               <div className="p-8 space-y-4">
                 {[1, 2, 3].map((n) => (
-                  <div key={n} className="h-12 bg-slate-800/40 rounded-xl animate-pulse" />
+                  <div key={n} className="h-12 bg-white/[0.04] rounded-xl animate-pulse" />
                 ))}
               </div>
             ) : users.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="bg-[#0e131d] text-slate-400 font-semibold text-xs uppercase tracking-wider border-b border-slate-800">
+                    <tr className="bg-[#0d121f] text-slate-400 font-semibold text-[11px] uppercase tracking-wider border-b border-white/[0.08]">
                       <th className="py-3 px-4">User</th>
                       <th className="py-3 px-4">Email</th>
                       <th className="py-3 px-4">Role</th>
@@ -506,9 +509,9 @@ export default function AdminPage() {
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-xs">
+                  <tbody className="divide-y divide-white/[0.06] text-xs">
                     {users.map((u) => (
-                      <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
+                      <tr key={u.id} className="hover:bg-white/[0.03] transition-colors">
                         <td className="py-3 px-4 font-semibold text-slate-200">
                           {u.username}
                         </td>
@@ -575,30 +578,30 @@ export default function AdminPage() {
           ) : stats ? (
             <>
               {/* Submission Execution Stats */}
-              <div className="bg-[#111622] border border-slate-800 rounded-2xl p-6 shadow-md">
+              <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl p-6 shadow-lg shadow-black/40">
                 <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4">
                   Code Submissions & Execution Telemetry (Last 30 Days)
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="bg-[#0b0f17] p-4 rounded-xl border border-slate-800">
+                  <div className="bg-[#080b13] p-4 rounded-xl border border-white/[0.08]">
                     <div className="text-xs text-slate-400">Total Submissions</div>
                     <div className="text-2xl font-black text-white font-mono mt-1">
                       {stats.submissions?.total_submissions || 0}
                     </div>
                   </div>
-                  <div className="bg-[#0b0f17] p-4 rounded-xl border border-slate-800">
+                  <div className="bg-[#080b13] p-4 rounded-xl border border-white/[0.08]">
                     <div className="text-xs text-slate-400">Success Rate</div>
                     <div className="text-2xl font-black text-emerald-400 font-mono mt-1">
                       {stats.submissions?.success_rate?.toFixed(1) || 0}%
                     </div>
                   </div>
-                  <div className="bg-[#0b0f17] p-4 rounded-xl border border-slate-800">
+                  <div className="bg-[#080b13] p-4 rounded-xl border border-white/[0.08]">
                     <div className="text-xs text-slate-400">Accepted</div>
                     <div className="text-2xl font-black text-emerald-300 font-mono mt-1">
                       {stats.submissions?.accepted || 0}
                     </div>
                   </div>
-                  <div className="bg-[#0b0f17] p-4 rounded-xl border border-slate-800">
+                  <div className="bg-[#080b13] p-4 rounded-xl border border-white/[0.08]">
                     <div className="text-xs text-slate-400">Time Limit Exceeded</div>
                     <div className="text-2xl font-black text-amber-400 font-mono mt-1">
                       {stats.submissions?.time_limit_exceeded || 0}
@@ -609,36 +612,36 @@ export default function AdminPage() {
 
               {/* Users & Problems Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-[#111622] border border-slate-800 rounded-2xl p-6">
+                <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl p-6 shadow-lg shadow-black/40">
                   <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4">
                     Users Overview
                   </h3>
                   <div className="space-y-2 text-xs">
-                    <div className="flex justify-between py-1 border-b border-slate-800">
+                    <div className="flex justify-between py-1 border-b border-white/[0.06]">
                       <span className="text-slate-400">Total Registered</span>
                       <span className="font-mono text-white font-bold">{stats.users?.total_users}</span>
                     </div>
-                    <div className="flex justify-between py-1 border-b border-slate-800">
+                    <div className="flex justify-between py-1 border-b border-white/[0.06]">
                       <span className="text-slate-400">Active Accounts</span>
                       <span className="font-mono text-emerald-400">{stats.users?.by_status?.active || 0}</span>
                     </div>
                     <div className="flex justify-between py-1">
                       <span className="text-slate-400">New Registrations in Window</span>
-                      <span className="font-mono text-blue-400">{stats.users?.new_registrations_in_period || 0}</span>
+                      <span className="font-mono text-indigo-400">{stats.users?.new_registrations_in_period || 0}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-[#111622] border border-slate-800 rounded-2xl p-6">
+                <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl p-6 shadow-lg shadow-black/40">
                   <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4">
                     Problems Distribution
                   </h3>
                   <div className="space-y-2 text-xs">
-                    <div className="flex justify-between py-1 border-b border-slate-800">
+                    <div className="flex justify-between py-1 border-b border-white/[0.06]">
                       <span className="text-slate-400">Total Problems</span>
                       <span className="font-mono text-white font-bold">{stats.problems?.total_problems}</span>
                     </div>
-                    <div className="flex justify-between py-1 border-b border-slate-800">
+                    <div className="flex justify-between py-1 border-b border-white/[0.06]">
                       <span className="text-slate-400">Easy / Medium / Hard</span>
                       <span className="font-mono text-slate-200">
                         {stats.problems?.by_difficulty?.easy || 0} / {stats.problems?.by_difficulty?.medium || 0} / {stats.problems?.by_difficulty?.hard || 0}
@@ -664,18 +667,18 @@ export default function AdminPage() {
       {/* TAB 4: Audit Logs (Admin Only) */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       {activeTab === "audit" && isAdmin && (
-        <div className="bg-[#111622] border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+        <div className="bg-[#0a0d14] border border-white/[0.08] rounded-2xl overflow-hidden shadow-lg shadow-black/40">
           {auditLoading ? (
             <div className="p-8 space-y-4">
               {[1, 2, 3].map((n) => (
-                <div key={n} className="h-10 bg-slate-800/40 rounded animate-pulse" />
+                <div key={n} className="h-10 bg-white/[0.04] rounded animate-pulse" />
               ))}
             </div>
           ) : auditLogs.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="bg-[#0e131d] text-slate-400 font-semibold text-xs uppercase tracking-wider border-b border-slate-800">
+                  <tr className="bg-[#0d121f] text-slate-400 font-semibold text-[11px] uppercase tracking-wider border-b border-white/[0.08]">
                     <th className="py-3 px-4">Action</th>
                     <th className="py-3 px-4">Actor</th>
                     <th className="py-3 px-4">Target</th>
@@ -723,8 +726,8 @@ export default function AdminPage() {
       {/* ─────────────────────────────────────────────────────────────────── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#111622] border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="bg-[#0a0d14] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl shadow-black/80">
+            <div className="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between">
               <h3 className="text-base font-bold text-white">
                 {editingProblem ? `Edit Problem #${editingProblem.id}` : "Create New Problem"}
               </h3>

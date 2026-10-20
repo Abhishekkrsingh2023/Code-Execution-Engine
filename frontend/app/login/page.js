@@ -167,12 +167,12 @@ function LoginContent() {
 
       {/* Form Card */}
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-[#0e1322]/90 backdrop-blur-2xl py-8 px-6 sm:px-10 shadow-2xl shadow-indigo-950/40 rounded-3xl border border-white/10 relative overflow-hidden">
+        <div className="bg-[#0a0d14] py-8 px-6 sm:px-10 shadow-2xl shadow-black/60 rounded-2xl border border-white/[0.08] relative overflow-hidden">
           {/* Top subtle glowing accent bar */}
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
 
           {/* Method Selector Tabs */}
-          <div className="flex bg-[#07090e]/80 border border-white/10 p-1 rounded-xl mb-6">
+          <div className="flex bg-[#080b13] border border-white/[0.08] p-1 rounded-xl mb-6">
             <button
               type="button"
               onClick={() => {
