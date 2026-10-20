@@ -17,12 +17,12 @@ from app.routers import (
 )
 from app.utils.audit_logger import setup_audit_logger
 
-# Suppress harmless CPython 3.13 resource_tracker warning on reloader SIGTERM shutdown
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    module="multiprocessing.resource_tracker",
-)
+# # Suppress harmless CPython 3.13 resource_tracker warning on reloader SIGTERM shutdown
+# warnings.filterwarnings(
+#     "ignore",
+#     category=UserWarning,
+#     module="multiprocessing.resource_tracker",
+# )
 
 
 @asynccontextmanager
