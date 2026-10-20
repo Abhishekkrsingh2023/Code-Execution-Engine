@@ -12,7 +12,7 @@ from app.controllers.code_controller import (
     handle_submit_code_request,
 )
 from app.database import get_db
-from app.dependencies import get_current_user_optional
+from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.submission import RunRequest, SubmitRequest
 
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api-v1/code", tags=["code"])
 @router.post("/run-code", include_in_schema=False)
 async def run_code_request(
     submission: RunRequest,
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Run code for testing and execution without updating marks or leaderboard.
@@ -40,7 +40,7 @@ async def run_code_request(
 @router.post("/submit-code")
 async def submit_code_request(
     submission: SubmitRequest,
-    current_user: User | None = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Submit code for official problem evaluation against internal test cases.

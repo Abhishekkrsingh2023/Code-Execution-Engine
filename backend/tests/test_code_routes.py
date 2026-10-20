@@ -31,6 +31,12 @@ from app.models.user import User, UserRole, UserStatus
 from app.utils.jwt import create_access_token
 
 
+def auth_headers(user: User) -> dict[str, str]:
+    """Helper returning standard Bearer authorization header with a valid JWT access token."""
+    token = create_access_token(user_id=user.id, role=user.role)
+    return {"Authorization": f"Bearer {token}"}
+
+
 class TestCodeSubmitRoute:
     """Test suite for POST /api-v1/code/submit-code."""
 
@@ -38,6 +44,7 @@ class TestCodeSubmitRoute:
         self,
         async_client: AsyncClient,
         redis_client: Redis,
+        normal_user: User,
     ) -> None:
         """Arrange: Valid Python submission with test cases.
         Act: POST to /api-v1/code/submit-code.
@@ -59,7 +66,11 @@ class TestCodeSubmitRoute:
             "time_limit": 2.0,
         }
 
-        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/submit-code",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -76,6 +87,7 @@ class TestCodeSubmitRoute:
         assert redis_data["submission_id"] == sub_id
         assert redis_data["language"] == "python"
         assert redis_data["status"] in ("queued", "running", "completed")
+        assert redis_data["user_id"] == str(normal_user.id)
         if redis_data["status"] == "queued":
             queue_len = await redis_client.llen(settings.REDIS_QUEUE_NAME)
             assert queue_len >= 1
@@ -98,6 +110,7 @@ class TestCodeSubmitRoute:
         async_client: AsyncClient,
         language: str,
         file_ext: str,
+        normal_user: User,
     ) -> None:
         """Arrange: Valid submission for each supported compiled language.
         Act: POST to /api-v1/code/submit-code.
@@ -112,7 +125,11 @@ class TestCodeSubmitRoute:
             "time_limit": 1.5,
         }
 
-        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/submit-code",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
 
         assert response.status_code == 200
         sub_id = response.json()["submission"]
@@ -122,6 +139,7 @@ class TestCodeSubmitRoute:
     async def test_submit_code_unsupported_language_fails(
         self,
         async_client: AsyncClient,
+        normal_user: User,
     ) -> None:
         """Arrange: Payload specifying an unsupported language ('ruby').
         Act: POST to /api-v1/code/submit-code.
@@ -135,13 +153,18 @@ class TestCodeSubmitRoute:
             "test_cases": [{"input": "1", "expected_output": "1"}],
         }
 
-        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/submit-code",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
 
         assert response.status_code == 422
 
     async def test_submit_code_empty_code_fails(
         self,
         async_client: AsyncClient,
+        normal_user: User,
     ) -> None:
         """Arrange: Payload with empty user_code string.
         Act: POST to /api-v1/code/submit-code.
@@ -155,13 +178,18 @@ class TestCodeSubmitRoute:
             "test_cases": [{"input": "1", "expected_output": "1"}],
         }
 
-        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/submit-code",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
 
         assert response.status_code == 422
 
     async def test_submit_code_unknown_problem_without_test_cases_returns_404(
         self,
         async_client: AsyncClient,
+        normal_user: User,
     ) -> None:
         """Arrange: Payload with unknown problem and empty test_cases.
         Act: POST to /api-v1/code/submit-code.
@@ -175,7 +203,11 @@ class TestCodeSubmitRoute:
             "test_cases": [],
         }
 
-        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/submit-code",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
 
         assert response.status_code == 404
         assert "not found or has no internal test cases" in response.json()["detail"]
@@ -183,6 +215,7 @@ class TestCodeSubmitRoute:
     async def test_submit_code_extra_fields_forbidden(
         self,
         async_client: AsyncClient,
+        normal_user: User,
     ) -> None:
         """Arrange: Payload with forbidden unexpected field ('extra_field').
         Act: POST to /api-v1/code/submit-code.
@@ -197,13 +230,18 @@ class TestCodeSubmitRoute:
             "extra_field": "disallowed",
         }
 
-        response = await async_client.post("/api-v1/code/submit-code", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/submit-code",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
 
         assert response.status_code == 422
 
     async def test_submit_code_failure_cleans_up_directory_and_raises_500(
         self,
         async_client: AsyncClient,
+        normal_user: User,
     ) -> None:
         """Arrange: Simulate Redis pipeline failure during submission enqueueing.
         Act: POST to /api-v1/code/submit-code.
@@ -229,7 +267,11 @@ class TestCodeSubmitRoute:
             mock_pipe.execute.side_effect = RuntimeError("Redis connection broken")
             mock_pipeline.return_value = mock_pipe
 
-            response = await async_client.post("/api-v1/code/submit-code", json=payload)
+            response = await async_client.post(
+                "/api-v1/code/submit-code",
+                json=payload,
+                headers=auth_headers(normal_user),
+            )
 
         assert response.status_code == 500
         assert response.json()["detail"] == "Failed to enqueue submission"
@@ -325,6 +367,7 @@ class TestRunVsSubmitDistinction:
         async_client: AsyncClient,
         redis_client: Redis,
         db_session: AsyncSession,
+        normal_user: User,
     ) -> None:
         """Arrange: Problem in DB with sample and hidden test cases.
         Act: POST /api-v1/code/submit with NO test_cases in the request body.
@@ -365,7 +408,11 @@ class TestRunVsSubmitDistinction:
             "language": "python",
         }
 
-        response = await async_client.post("/api-v1/code/submit", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/submit",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["mode"] == "submit"
@@ -391,6 +438,7 @@ class TestRunVsSubmitDistinction:
         self,
         async_client: AsyncClient,
         redis_client: Redis,
+        normal_user: User,
     ) -> None:
         """Arrange: User provides custom test cases to /api-v1/code/run.
         Act: POST /api-v1/code/run.
@@ -404,7 +452,11 @@ class TestRunVsSubmitDistinction:
             "test_cases": [{"input": "custom_data_123", "expected_output": "custom_data_123"}],
         }
 
-        response = await async_client.post("/api-v1/code/run", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/run",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["mode"] == "run"
@@ -429,6 +481,7 @@ class TestRunVsSubmitDistinction:
         self,
         async_client: AsyncClient,
         db_session: AsyncSession,
+        normal_user: User,
     ) -> None:
         """Arrange: Problem in DB.
         Act: POST /api-v1/code/run with NO test_cases.
@@ -449,7 +502,11 @@ class TestRunVsSubmitDistinction:
             "language": "python",
         }
 
-        response = await async_client.post("/api-v1/code/run", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/run",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
         assert response.status_code == 400
         assert "No test cases provided" in response.json()["detail"]
 
@@ -576,6 +633,7 @@ class TestRunVsSubmitDistinction:
         self,
         async_client: AsyncClient,
         db_session: AsyncSession,
+        normal_user: User,
     ) -> None:
         """Verify that integer problem_id and integer test case id are accepted without type mismatch."""
         problem = Problem(
@@ -616,8 +674,43 @@ class TestRunVsSubmitDistinction:
             ],
         }
 
-        response = await async_client.post("/api-v1/code/run", json=payload)
+        response = await async_client.post(
+            "/api-v1/code/run",
+            json=payload,
+            headers=auth_headers(normal_user),
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["mode"] == "run"
         assert data["status"] == "queued"
+
+    async def test_run_unauthenticated_returns_401(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Verify unauthenticated user cannot execute /api-v1/code/run."""
+        payload = {
+            "problem_id": 1,
+            "problem_name": "Test Run Auth",
+            "user_code": "print('hello')",
+            "language": "python",
+            "test_cases": [{"input": "1", "expected_output": "1"}],
+        }
+        response = await async_client.post("/api-v1/code/run", json=payload)
+        assert response.status_code == 401
+        assert "Authentication credentials were not provided" in response.json()["detail"]
+
+    async def test_submit_unauthenticated_returns_401(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        """Verify unauthenticated user cannot execute /api-v1/code/submit."""
+        payload = {
+            "problem_id": 1,
+            "problem_name": "Test Submit Auth",
+            "user_code": "print('hello')",
+            "language": "python",
+        }
+        response = await async_client.post("/api-v1/code/submit", json=payload)
+        assert response.status_code == 401
+        assert "Authentication credentials were not provided" in response.json()["detail"]
