@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     REDIS_REVOKED_TOKEN_PREFIX: str = "revoked_token:"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
