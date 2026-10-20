@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { useAuth } from "@/lib/AuthContext";
@@ -38,7 +38,7 @@ const SUPPORTED_LANGS = [
   {
     id: "cpp",
     name: "C++",
-    icon: "/languages/c-.png",
+    icon: "/languages/cpp.png",
     version: "GCC 13",
     monacoLang: "cpp",
   },
@@ -69,7 +69,8 @@ const DEFAULT_TEMPLATES = {
 export default function ProblemDetailPage() {
   const routeParams = useParams();
   const problemId = routeParams?.id;
-  const { user, refreshUser } = useAuth();
+  const router = useRouter();
+  const { user, loading: authLoading, refreshUser } = useAuth();
 
   // Problem data state
   const [problemData, setProblemData] = useState(null);
@@ -115,6 +116,18 @@ export default function ProblemDetailPage() {
   const currentLangObj =
     SUPPORTED_LANGS.find((l) => l.id === language) || SUPPORTED_LANGS[0];
 
+  // Clean up SSE and Polling
+  const cleanupLiveExecution = () => {
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
   // Fetch problem data on mount
   useEffect(() => {
     if (!problemId) return;
@@ -139,7 +152,7 @@ export default function ProblemDetailPage() {
               const sampleOnly = dbTcs.filter((tc) => tc.is_sample);
               samples = sampleOnly.length > 0 ? sampleOnly : dbTcs.slice(0, 4);
             }
-          } catch {}
+          } catch { }
         }
         setSampleCases(samples);
 
@@ -176,18 +189,6 @@ export default function ProblemDetailPage() {
       cleanupLiveExecution();
     };
   }, [problemId]);
-
-  // Clean up SSE and Polling
-  const cleanupLiveExecution = () => {
-    if (sseRef.current) {
-      sseRef.current.close();
-      sseRef.current = null;
-    }
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-  };
 
   const rafHRef = useRef(null);
   const rafVRef = useRef(null);
@@ -316,6 +317,19 @@ export default function ProblemDetailPage() {
 
   // Trigger Execution (Run or Submit)
   const handleExecute = async (mode) => {
+    if (authLoading) return;
+
+    if (!user) {
+      if (
+        confirm(
+          "Please log in to run or submit code. Would you like to log in now?"
+        )
+      ) {
+        router.push(`/login?redirect=/problems/${problemId}`);
+      }
+      return;
+    }
+
     if (!code.trim()) {
       alert("Please enter code before running or submitting.");
       return;
@@ -413,7 +427,7 @@ export default function ProblemDetailPage() {
           sseRef.current = null;
         }
       };
-    } catch {}
+    } catch { }
   };
 
   // Polling fallback
@@ -481,7 +495,7 @@ export default function ProblemDetailPage() {
             ids.push(parseInt(problemId, 10));
             localStorage.setItem("code_zero_solved_ids", JSON.stringify(ids));
           }
-        } catch {}
+        } catch { }
       }
 
       // Record in session submission history
@@ -507,7 +521,7 @@ export default function ProblemDetailPage() {
           historyKey,
           JSON.stringify(currentHist.slice(0, 50))
         );
-      } catch {}
+      } catch { }
     }
   };
 
@@ -568,9 +582,8 @@ export default function ProblemDetailPage() {
       {/* Invisible overlay during drag to prevent Monaco event interception */}
       {(isDraggingH || isDraggingV) && (
         <div
-          className={`fixed inset-0 z-50 select-none ${
-            isDraggingH ? "cursor-col-resize" : "cursor-row-resize"
-          }`}
+          className={`fixed inset-0 z-50 select-none ${isDraggingH ? "cursor-col-resize" : "cursor-row-resize"
+            }`}
           style={{ background: "transparent" }}
         />
       )}
@@ -737,9 +750,8 @@ export default function ProblemDetailPage() {
         {/* ========================================================= */}
         <div
           onPointerDown={() => setIsDraggingH(true)}
-          className={`hidden lg:flex w-1.5 hover:w-2 bg-[#07090e] hover:bg-indigo-500/40 cursor-col-resize items-center justify-center transition-all z-20 shrink-0 select-none ${
-            isDraggingH ? "bg-indigo-500 w-2" : "border-r border-white/[0.08]"
-          }`}
+          className={`hidden lg:flex w-1.5 hover:w-2 bg-[#07090e] hover:bg-indigo-500/40 cursor-col-resize items-center justify-center transition-all z-20 shrink-0 select-none ${isDraggingH ? "bg-indigo-500 w-2" : "border-r border-white/[0.08]"
+            }`}
           title="Drag to resize panel"
         >
           <div className="w-0.5 h-8 bg-slate-600 rounded-full" />
@@ -759,11 +771,10 @@ export default function ProblemDetailPage() {
                   <button
                     key={lang.id}
                     onClick={() => handleLanguageChange(lang.id)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      isSelected
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isSelected
                         ? "bg-[#111628] text-white border border-indigo-500/50 shadow-sm shadow-indigo-500/20"
                         : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
-                    }`}
+                      }`}
                   >
                     <Image
                       src={lang.icon}
@@ -793,11 +804,10 @@ export default function ProblemDetailPage() {
                       <button
                         key={lang.id}
                         onClick={() => handleLanguageChange(lang.id)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors ${
-                          language === lang.id
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors ${language === lang.id
                             ? "bg-indigo-600/20 text-indigo-300 font-semibold"
                             : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
-                        }`}
+                          }`}
                       >
                         <Image
                           src={lang.icon}
@@ -916,9 +926,8 @@ export default function ProblemDetailPage() {
           {/* ========================================================= */}
           <div
             onPointerDown={() => setIsDraggingV(true)}
-            className={`h-1.5 hover:h-2 bg-[#07090e] hover:bg-indigo-500/40 cursor-row-resize flex items-center justify-center transition-all z-20 shrink-0 select-none ${
-              isDraggingV ? "bg-indigo-500 h-2" : "border-t border-white/[0.08]"
-            }`}
+            className={`h-1.5 hover:h-2 bg-[#07090e] hover:bg-indigo-500/40 cursor-row-resize flex items-center justify-center transition-all z-20 shrink-0 select-none ${isDraggingV ? "bg-indigo-500 h-2" : "border-t border-white/[0.08]"
+              }`}
             title="Drag to resize test-case panel"
           >
             <div className="h-0.5 w-12 bg-slate-600 rounded-full" />
@@ -931,9 +940,8 @@ export default function ProblemDetailPage() {
             style={{
               height: isTestcaseCollapsed ? "38px" : `${testcaseHeight}px`,
             }}
-            className={`flex flex-col bg-[#07090e] overflow-hidden relative shrink-0 ${
-              isDraggingV ? "" : "transition-[height] duration-200 ease-out"
-            }`}
+            className={`flex flex-col bg-[#07090e] overflow-hidden relative shrink-0 ${isDraggingV ? "" : "transition-[height] duration-200 ease-out"
+              }`}
           >
             {/* Header: Tabs + Actions (Add Test Case, Run All, Collapse) */}
             <div className="h-10 bg-[#0a0d14] border-b border-white/[0.08] px-4 flex items-center justify-between shrink-0">
@@ -945,11 +953,10 @@ export default function ProblemDetailPage() {
                     setActiveTab("testcases");
                     setIsTestcaseCollapsed(false);
                   }}
-                  className={`relative h-full flex items-center text-xs font-semibold transition-colors ${
-                    activeTab === "testcases"
+                  className={`relative h-full flex items-center text-xs font-semibold transition-colors ${activeTab === "testcases"
                       ? "text-white"
                       : "text-slate-400 hover:text-white"
-                  }`}
+                    }`}
                 >
                   <span>Test Cases</span>
                   {activeTab === "testcases" && (
@@ -963,11 +970,10 @@ export default function ProblemDetailPage() {
                     setActiveTab("custom_input");
                     setIsTestcaseCollapsed(false);
                   }}
-                  className={`relative h-full flex items-center text-xs font-semibold transition-colors ${
-                    activeTab === "custom_input"
+                  className={`relative h-full flex items-center text-xs font-semibold transition-colors ${activeTab === "custom_input"
                       ? "text-white"
                       : "text-slate-400 hover:text-white"
-                  }`}
+                    }`}
                 >
                   <span>Custom Input</span>
                   {activeTab === "custom_input" && (
@@ -982,20 +988,18 @@ export default function ProblemDetailPage() {
                       setActiveTab("result");
                       setIsTestcaseCollapsed(false);
                     }}
-                    className={`relative h-full flex items-center gap-1.5 text-xs font-semibold transition-colors ${
-                      activeTab === "result"
+                    className={`relative h-full flex items-center gap-1.5 text-xs font-semibold transition-colors ${activeTab === "result"
                         ? "text-white"
                         : "text-slate-400 hover:text-white"
-                    }`}
+                      }`}
                   >
                     <span>Results</span>
                     <span
-                      className={`w-2 h-2 rounded-full ${
-                        execResult.status === "completed" ||
-                        execResult.status === "accepted"
+                      className={`w-2 h-2 rounded-full ${execResult.status === "completed" ||
+                          execResult.status === "accepted"
                           ? "bg-emerald-400"
                           : "bg-rose-400"
-                      }`}
+                        }`}
                     />
                     {activeTab === "result" && (
                       <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.9)]" />
@@ -1033,9 +1037,8 @@ export default function ProblemDetailPage() {
                   title={isTestcaseCollapsed ? "Expand panel" : "Collapse panel"}
                 >
                   <svg
-                    className={`w-4 h-4 transition-transform duration-200 ${
-                      isTestcaseCollapsed ? "rotate-180" : ""
-                    }`}
+                    className={`w-4 h-4 transition-transform duration-200 ${isTestcaseCollapsed ? "rotate-180" : ""
+                      }`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -1100,11 +1103,10 @@ export default function ProblemDetailPage() {
                           onClick={() =>
                             setExpandedCaseId(isExpanded ? null : tc.displayIdx)
                           }
-                          className={`rounded-xl border transition-all cursor-pointer ${
-                            isExpanded
+                          className={`rounded-xl border transition-all cursor-pointer ${isExpanded
                               ? "bg-[#0d1222] border-indigo-500/40 shadow-md"
                               : "bg-[#0b0e17] hover:bg-[#0e1322] border-white/[0.06]"
-                          }`}
+                            }`}
                         >
                           {/* Row Summary */}
                           <div className="grid grid-cols-12 gap-2 px-3 py-2.5 items-center">
@@ -1131,9 +1133,8 @@ export default function ProblemDetailPage() {
                                 </button>
                               )}
                               <span
-                                className={`text-slate-400 text-xs transition-transform inline-block ${
-                                  isExpanded ? "rotate-90" : ""
-                                }`}
+                                className={`text-slate-400 text-xs transition-transform inline-block ${isExpanded ? "rotate-90" : ""
+                                  }`}
                               >
                                 &gt;
                               </span>
@@ -1242,12 +1243,11 @@ export default function ProblemDetailPage() {
                     <div className="flex flex-wrap items-center justify-between p-3.5 rounded-xl border bg-[#0b0e17] border-white/10">
                       <div className="flex items-center gap-3">
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                            execResult.status === "accepted" ||
-                            execResult.status === "completed"
+                          className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${execResult.status === "accepted" ||
+                              execResult.status === "completed"
                               ? "bg-emerald-950/60 border border-emerald-700 text-emerald-300"
                               : "bg-rose-950/60 border border-rose-700 text-rose-300"
-                          }`}
+                            }`}
                         >
                           {execResult.status}
                         </span>
