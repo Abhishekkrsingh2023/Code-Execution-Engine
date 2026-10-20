@@ -101,6 +101,8 @@ export default function ProblemDetailPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCaseInput, setNewCaseInput] = useState("");
   const [newCaseExpected, setNewCaseExpected] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginModalAction, setLoginModalAction] = useState("run"); // "run" | "submit"
 
   // Execution state
   const [executing, setExecuting] = useState(false);
@@ -320,18 +322,20 @@ export default function ProblemDetailPage() {
     if (authLoading) return;
 
     if (!user) {
-      if (
-        confirm(
-          "Please log in to run or submit code. Would you like to log in now?"
-        )
-      ) {
-        router.push(`/login?redirect=/problems/${problemId}`);
-      }
+      setLoginModalAction(mode);
+      setShowLoginModal(true);
       return;
     }
 
     if (!code.trim()) {
-      alert("Please enter code before running or submitting.");
+      setExecStatus("failed");
+      setExecResult({
+        error: "Please enter your code before running or submitting.",
+      });
+      setActiveTab("result");
+      if (isTestcaseCollapsed) {
+        setIsTestcaseCollapsed(false);
+      }
       return;
     }
 
@@ -1365,6 +1369,109 @@ export default function ProblemDetailPage() {
               >
                 Add Test Case
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* POP-CARD: AUTHENTICATION REQUIRED (FOR RUN / SUBMIT)      */}
+      {/* ========================================================= */}
+      {showLoginModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setShowLoginModal(false)}
+        >
+          <div
+            className="relative bg-[#0e1322] border border-white/10 rounded-3xl w-full max-w-md p-6 sm:p-8 space-y-6 shadow-2xl shadow-indigo-950/60 backdrop-blur-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Ambient lighting glows */}
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
+            <div className="absolute -top-16 -right-16 w-36 h-36 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
+
+            {/* Close button */}
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+              aria-label="Close modal"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Header / Brand Icon */}
+            <div className="flex flex-col items-center text-center space-y-3 pt-1">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600/20 to-purple-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
+                <svg
+                  className="w-7 h-7"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  Sign In to {loginModalAction === "submit" ? "Submit Code" : "Run Code"}
+                </h3>
+                <p className="mt-1.5 text-xs text-slate-400 leading-relaxed max-w-xs">
+                  Please log in to your account to execute code, evaluate test cases, and record your score.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-3 pt-1">
+              <button
+                onClick={() => {
+                  router.push(`/login?redirect=/problems/${problemId}`);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+              >
+                <span>Log In to Continue</span>
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+
+              <div className="flex items-center justify-between text-xs px-1 text-slate-400">
+                <button
+                  onClick={() => setShowLoginModal(false)}
+                  className="hover:text-white transition-colors text-[11px]"
+                >
+                  Cancel
+                </button>
+                <span className="text-[11px]">
+                  Don&apos;t have an account?{" "}
+                  <Link
+                    href="/register"
+                    className="text-indigo-400 hover:text-indigo-300 font-semibold underline-offset-2 hover:underline transition-colors"
+                  >
+                    Register
+                  </Link>
+                </span>
+              </div>
             </div>
           </div>
         </div>
