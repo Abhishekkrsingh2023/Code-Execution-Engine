@@ -21,6 +21,7 @@ dependencies = [
     "bcrypt>=5.0.0",
     "pyjwt>=2.15.1",
     "asyncer>=0.0.18",
+    "slowapi>=0.1.10",
 ]
 
 [dependency-groups]
