@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.controllers.code_controller import (
 )
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.limiter import limiter
 from app.models.user import User
 from app.schemas.submission import RunRequest, SubmitRequest
 
@@ -21,7 +22,9 @@ router = APIRouter(prefix="/api-v1/code", tags=["code"])
 
 @router.post("/run", summary="Run code against sample or custom test cases (does not update marks)")
 @router.post("/run-code", include_in_schema=False)
+@limiter.limit("10/minute")
 async def run_code_request(
+    request: Request,
     submission: RunRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -38,7 +41,9 @@ async def run_code_request(
     "/submit", summary="Submit code for evaluation against internal test cases (updates marks)"
 )
 @router.post("/submit-code")
+@limiter.limit("10/minute")
 async def submit_code_request(
+    request: Request,
     submission: SubmitRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

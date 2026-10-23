@@ -23,6 +23,7 @@ from sqlalchemy.pool import NullPool
 import app.models  # Ensure all models are registered with Base.metadata
 from app.config import settings
 from app.database import Base, get_db
+from app.limiter import limiter
 from app.main import app
 from app.models.user import User
 from app.redis_client import get_async_redis_client
@@ -94,6 +95,14 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
         yield client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter() -> Generator[None]:
+    """Ensures each test starts and finishes with an isolated, empty rate-limit store."""
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest_asyncio.fixture(autouse=True)
