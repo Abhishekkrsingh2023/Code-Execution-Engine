@@ -71,3 +71,18 @@ def get_otp_expiry(minutes: int = 10) -> datetime:
         datetime: Timezone-aware UTC expiration datetime.
     """
     return datetime.now(UTC) + timedelta(minutes=minutes)
+
+
+def extract_bearer_token(auth_header: str | None) -> str | None:
+    """Extracts a token string from an Authorization header value.
+
+    Supports both 'Bearer <token>' and raw '<token>' header formats.
+    """
+    if not auth_header:
+        return None
+    parts = auth_header.strip().split()
+    if len(parts) == 2 and parts[0].lower() == "bearer":
+        return parts[1]
+    elif len(parts) == 1:
+        return parts[0]
+    return None

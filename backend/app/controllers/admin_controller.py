@@ -34,6 +34,48 @@ from app.utils.audit_logger import log_audit_event, to_str_val
 from app.utils.security import hash_password
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Helper Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def _get_user_or_404(user_id: uuid.UUID, db: AsyncSession) -> User:
+    """Retrieves user by UUID or raises HTTP 404."""
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID '{user_id}' not found.",
+        )
+    return user
+
+
+async def _fetch_daily_trend(
+    db: AsyncSession,
+    date_column: Any,
+    entity_id_column: Any,
+    cutoff: datetime,
+) -> list[TimeSeriesPoint]:
+    """Aggregates entity counts grouped by day since cutoff date."""
+    date_col = func.date_trunc("day", date_column)
+    trend_stmt = (
+        select(date_col.label("day"), func.count(entity_id_column))
+        .where(date_column >= cutoff)
+        .group_by("day")
+        .order_by("day")
+    )
+    rows = (await db.execute(trend_stmt)).all()
+    return [
+        TimeSeriesPoint(
+            date=row[0].strftime("%Y-%m-%d") if hasattr(row[0], "strftime") else str(row[0]),
+            count=row[1],
+        )
+        for row in rows
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # User Management Handlers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -138,15 +180,7 @@ async def handle_get_admin_user_detail(
     db: AsyncSession,
 ) -> AdminUserDetailResponse:
     """Retrieves detailed user profile including recent submissions and audit actions."""
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
-        )
+    user = await _get_user_or_404(user_id, db)
 
     # Submissions count and recent submissions
     sub_count_stmt = select(func.count(Submission.id)).where(Submission.user_id == user.id)
@@ -247,15 +281,7 @@ async def handle_update_user_role(
             detail="Administrators cannot modify their own role.",
         )
 
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    target_user = result.scalar_one_or_none()
-
-    if target_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
-        )
+    target_user = await _get_user_or_404(user_id, db)
 
     # Protected system account check
     if target_user.is_protected:
@@ -370,15 +396,7 @@ async def handle_update_user_status(
             detail="Administrators cannot deactivate or suspend their own account.",
         )
 
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    target_user = result.scalar_one_or_none()
-
-    if target_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
-        )
+    target_user = await _get_user_or_404(user_id, db)
 
     # Protected system account check
     if target_user.is_protected and target_status_str != "active":
@@ -482,15 +500,7 @@ async def handle_admin_update_user(
                 detail="Administrators cannot deactivate or suspend their own account.",
             )
 
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    target_user = result.scalar_one_or_none()
-
-    if target_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
-        )
+    target_user = await _get_user_or_404(user_id, db)
 
     if target_user.is_protected:
         if payload.status is not None and payload.status != UserStatus.ACTIVE:
@@ -626,15 +636,7 @@ async def handle_admin_delete_user(
             detail="Administrators cannot delete their own account.",
         )
 
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    target_user = result.scalar_one_or_none()
-
-    if target_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID '{user_id}' not found.",
-        )
+    target_user = await _get_user_or_404(user_id, db)
 
     if target_user.is_protected:
         await log_audit_event(
@@ -731,21 +733,7 @@ async def handle_get_user_stats(
     new_in_period = (await db.execute(period_stmt)).scalar_one()
 
     # Registrations trend (daily aggregation)
-    date_col = func.date_trunc("day", User.created_at)
-    trend_stmt = (
-        select(date_col.label("day"), func.count(User.id))
-        .where(User.created_at >= cutoff)
-        .group_by("day")
-        .order_by("day")
-    )
-    trend_rows = (await db.execute(trend_stmt)).all()
-    registrations_trend = [
-        TimeSeriesPoint(
-            date=row[0].strftime("%Y-%m-%d") if hasattr(row[0], "strftime") else str(row[0]),
-            count=row[1],
-        )
-        for row in trend_rows
-    ]
+    registrations_trend = await _fetch_daily_trend(db, User.created_at, User.id, cutoff)
 
     return UserStatsResponse(
         total_users=total_users,
@@ -898,21 +886,7 @@ async def handle_get_submission_stats(
 
     # Submissions trend over time
     cutoff = datetime.now(UTC) - timedelta(days=days)
-    date_col = func.date_trunc("day", Submission.created_at)
-    trend_stmt = (
-        select(date_col.label("day"), func.count(Submission.id))
-        .where(Submission.created_at >= cutoff)
-        .group_by("day")
-        .order_by("day")
-    )
-    trend_rows = (await db.execute(trend_stmt)).all()
-    submissions_trend = [
-        TimeSeriesPoint(
-            date=row[0].strftime("%Y-%m-%d") if hasattr(row[0], "strftime") else str(row[0]),
-            count=row[1],
-        )
-        for row in trend_rows
-    ]
+    submissions_trend = await _fetch_daily_trend(db, Submission.created_at, Submission.id, cutoff)
 
     return SubmissionStatsResponse(
         total_submissions=total_submissions,
@@ -951,39 +925,9 @@ async def handle_get_activity_stats(
     )
     mod_actions = (await db.execute(mod_stmt)).scalars().all()
 
-    # User creation trend
-    u_date = func.date_trunc("day", User.created_at)
-    u_trend = (
-        select(u_date.label("day"), func.count(User.id))
-        .where(User.created_at >= cutoff)
-        .group_by("day")
-        .order_by("day")
-    )
-    u_rows = (await db.execute(u_trend)).all()
-    user_creation_trend = [
-        TimeSeriesPoint(
-            date=r[0].strftime("%Y-%m-%d") if hasattr(r[0], "strftime") else str(r[0]),
-            count=r[1],
-        )
-        for r in u_rows
-    ]
-
-    # Problem creation trend
-    p_date = func.date_trunc("day", Problem.created_at)
-    p_trend = (
-        select(p_date.label("day"), func.count(Problem.id))
-        .where(Problem.created_at >= cutoff)
-        .group_by("day")
-        .order_by("day")
-    )
-    p_rows = (await db.execute(p_trend)).all()
-    problem_creation_trend = [
-        TimeSeriesPoint(
-            date=r[0].strftime("%Y-%m-%d") if hasattr(r[0], "strftime") else str(r[0]),
-            count=r[1],
-        )
-        for r in p_rows
-    ]
+    # User and problem creation trends
+    user_creation_trend = await _fetch_daily_trend(db, User.created_at, User.id, cutoff)
+    problem_creation_trend = await _fetch_daily_trend(db, Problem.created_at, Problem.id, cutoff)
 
     return SystemActivityStatsResponse(
         recent_admin_actions=[AuditLogResponse.model_validate(a) for a in admin_actions],

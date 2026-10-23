@@ -94,6 +94,8 @@ async def log_audit_event(
     db: AsyncSession | None = None,
     *,
     action: str,
+    actor: Any | None = None,
+    request: Any | None = None,
     actor_id: uuid.UUID | None = None,
     actor_username: str | None = None,
     actor_role: str | None = None,
@@ -111,6 +113,17 @@ async def log_audit_event(
     - Loguru writes to file with structured metadata.
     - Audit entry is saved in the database even on failure paths.
     """
+    if actor is not None:
+        if actor_id is None:
+            actor_id = getattr(actor, "id", None)
+        if actor_username is None:
+            actor_username = str(getattr(actor, "username", ""))
+        if actor_role is None:
+            actor_role = to_str_val(getattr(actor, "role", None))
+    if request is not None and ip_address is None:
+        client = getattr(request, "client", None)
+        ip_address = client.host if client else None
+
     sanitized_details = sanitize_details(details) if details else None
 
     # 1. File-based logging with loguru

@@ -8,6 +8,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.utils.jwt import verify_access_token
+from app.utils.security import extract_bearer_token
 
 
 async def get_current_user(
@@ -40,11 +41,7 @@ async def get_current_user(
 
     # 2. Check Authorization header
     if not token and authorization:
-        parts = authorization.strip().split()
-        if len(parts) == 2 and parts[0].lower() == "bearer":
-            token = parts[1]
-        elif len(parts) == 1:
-            token = parts[0]
+        token = extract_bearer_token(authorization)
 
     if not token:
         raise HTTPException(

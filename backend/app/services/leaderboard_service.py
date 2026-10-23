@@ -11,8 +11,10 @@ from app.models.submission import Submission, SubmissionLanguage, SubmissionStat
 from app.models.user import User, UserRole, UserStatus
 
 
-async def resolve_problem_id(problem_id_val: int | str | None, db: AsyncSession) -> int | None:
-    """Resolves a problem identifier (numeric ID or title) to an integer Problem.id."""
+async def find_problem_by_id_or_title(
+    problem_id_val: int | str | None, db: AsyncSession
+) -> Problem | None:
+    """Finds an active problem by numeric ID or case-insensitive title."""
     if problem_id_val is None:
         return None
     cleaned = str(problem_id_val).strip()
@@ -20,16 +22,34 @@ async def resolve_problem_id(problem_id_val: int | str | None, db: AsyncSession)
         return None
     if cleaned.isdigit():
         val = int(cleaned)
-        stmt = select(Problem.id).where(Problem.id == val, Problem.is_deleted.is_(False))
+        stmt = select(Problem).where(Problem.id == val, Problem.is_deleted.is_(False))
         found = (await db.execute(stmt)).scalar_one_or_none()
         if found is not None:
             return found
 
     # Fallback to title matching
-    stmt_title = select(Problem.id).where(
-        Problem.title.ilike(cleaned), Problem.is_deleted.is_(False)
-    )
+    stmt_title = select(Problem).where(Problem.title.ilike(cleaned), Problem.is_deleted.is_(False))
     return (await db.execute(stmt_title)).scalars().first()
+
+
+async def resolve_problem_id(problem_id_val: int | str | None, db: AsyncSession) -> int | None:
+    """Resolves a problem identifier (numeric ID or title) to an integer Problem.id."""
+    problem = await find_problem_by_id_or_title(problem_id_val, db)
+    return problem.id if problem else None
+
+
+def _accumulate_scores(
+    rows: list[Any], initial_score: float, initial_solved: int
+) -> tuple[float, int]:
+    total = initial_score
+    solved = initial_solved
+    for row in rows:
+        b_score = float(row.best_score or 0.0)
+        m_score = float(row.max_score or 0.0)
+        total += b_score
+        if row.is_accepted or (m_score > 0 and b_score >= m_score):
+            solved += 1
+    return total, solved
 
 
 async def update_user_leaderboard_score(user_id: uuid.UUID, db: AsyncSession) -> tuple[float, int]:
@@ -57,16 +77,6 @@ async def update_user_leaderboard_score(user_id: uuid.UUID, db: AsyncSession) ->
     )
     reg_rows = (await db.execute(stmt_registered)).all()
 
-    total_score = 0.0
-    problems_solved = 0
-
-    for row in reg_rows:
-        b_score = float(row.best_score or 0.0)
-        m_score = float(row.max_score or 0.0)
-        total_score += b_score
-        if row.is_accepted or (m_score > 0 and b_score >= m_score):
-            problems_solved += 1
-
     # 2. Ad-hoc submissions (unregistered problems grouped by problem_name)
     stmt_adhoc = (
         select(
@@ -84,13 +94,8 @@ async def update_user_leaderboard_score(user_id: uuid.UUID, db: AsyncSession) ->
     )
     adhoc_rows = (await db.execute(stmt_adhoc)).all()
 
-    for row in adhoc_rows:
-        b_score = float(row.best_score or 0.0)
-        m_score = float(row.max_score or 0.0)
-        total_score += b_score
-        if row.is_accepted or (m_score > 0 and b_score >= m_score):
-            problems_solved += 1
-
+    total_score, problems_solved = _accumulate_scores(reg_rows, 0.0, 0)
+    total_score, problems_solved = _accumulate_scores(adhoc_rows, total_score, problems_solved)
     total_score = round(total_score, 2)
 
     # 3. Update the user row

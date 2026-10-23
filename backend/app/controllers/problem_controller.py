@@ -107,6 +107,19 @@ async def handle_create_problem(
         ) from exc
 
 
+async def _get_active_problem_or_404(problem_id: int, db: AsyncSession) -> Problem:
+    """Retrieves an active (non-deleted) problem by ID or raises 404."""
+    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
+    result = await db.execute(stmt)
+    problem = result.scalar_one_or_none()
+    if problem is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Problem with ID {problem_id} not found.",
+        )
+    return problem
+
+
 async def handle_update_problem(
     user: User,
     problem_id: int,
@@ -120,15 +133,7 @@ async def handle_update_problem(
     actor_username = str(user.username)
     actor_role = to_str_val(user.role)
 
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
-    result = await db.execute(stmt)
-    problem = result.scalar_one_or_none()
-
-    if problem is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Problem with ID {problem_id} not found.",
-        )
+    problem = await _get_active_problem_or_404(problem_id, db)
 
     changes: dict[str, dict[str, str]] = {}
     if payload.title is not None and payload.title != problem.title:
@@ -217,15 +222,7 @@ async def handle_update_problem_status(
     actor_username = str(user.username)
     actor_role = to_str_val(user.role)
 
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
-    result = await db.execute(stmt)
-    problem = result.scalar_one_or_none()
-
-    if problem is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Problem with ID {problem_id} not found.",
-        )
+    problem = await _get_active_problem_or_404(problem_id, db)
 
     old_status = to_str_val(problem.status)
     new_status = to_str_val(payload.status)
@@ -285,15 +282,7 @@ async def handle_delete_problem(
     actor_username = str(user.username)
     actor_role = to_str_val(user.role)
 
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
-    result = await db.execute(stmt)
-    problem = result.scalar_one_or_none()
-
-    if problem is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Problem with ID {problem_id} not found.",
-        )
+    problem = await _get_active_problem_or_404(problem_id, db)
 
     problem.is_deleted = True
     problem.deleted_at = _utcnow()
@@ -403,15 +392,7 @@ async def handle_get_problem(
     db: AsyncSession,
 ) -> ProblemResponse:
     """Retrieves single problem by ID."""
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
-    result = await db.execute(stmt)
-    problem = result.scalar_one_or_none()
-
-    if problem is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Problem with ID {problem_id} not found.",
-        )
+    problem = await _get_active_problem_or_404(problem_id, db)
 
     return ProblemResponse.model_validate(problem)
 
@@ -583,15 +564,7 @@ async def handle_get_full_problem(
     db: AsyncSession,
 ) -> FullProblemResponse:
     """Retrieves problem along with its test cases and associated templates."""
-    stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
-    result = await db.execute(stmt)
-    problem = result.scalar_one_or_none()
-
-    if problem is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Problem with ID {problem_id} not found.",
-        )
+    problem = await _get_active_problem_or_404(problem_id, db)
 
     code_id = problem.id
     stmt_common = (
@@ -620,15 +593,7 @@ async def handle_get_full_problem(
     if not run_tcs and problem.test_cases:
         sample_cases = [tc for tc in problem.test_cases if tc.is_sample]
         selected_cases = sample_cases if sample_cases else list(problem.test_cases)
-        run_tcs = [
-            {
-                "id": tc.id,
-                "input": tc.input,
-                "expected_output": tc.expected_output,
-                "weight": tc.weight,
-            }
-            for tc in selected_cases
-        ]
+        run_tcs = [tc.to_dict() for tc in selected_cases]
 
     total_count = len(problem.test_cases)
     if total_count == 0 and common_tmpl:

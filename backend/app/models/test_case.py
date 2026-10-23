@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, Float, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -55,3 +55,12 @@ class TestCase(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Returns standard dictionary representation of test case."""
+        return {
+            "id": self.id,
+            "input": self.input,
+            "expected_output": self.expected_output,
+            "weight": self.weight,
+        }

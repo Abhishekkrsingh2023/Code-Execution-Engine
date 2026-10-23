@@ -26,6 +26,7 @@ from app.schemas.user import (
 from app.utils.cookies import clear_auth_cookies, set_auth_cookies
 from app.utils.jwt import create_access_token, create_refresh_token, decode_jwt_token
 from app.utils.security import (
+    extract_bearer_token,
     generate_otp,
     get_otp_expiry,
     hash_password,
@@ -381,13 +382,7 @@ async def handle_refresh_token(
 
     # 3. Header transport fallback
     if not token_str:
-        auth_header = request.headers.get("authorization")
-        if auth_header:
-            parts = auth_header.strip().split()
-            if len(parts) == 2 and parts[0].lower() == "bearer":
-                token_str = parts[1]
-            elif len(parts) == 1:
-                token_str = parts[0]
+        token_str = extract_bearer_token(request.headers.get("authorization"))
 
     if not token_str:
         logger.warning(
@@ -428,13 +423,7 @@ async def handle_logout_user(
     """
     token_str: str | None = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
     if not token_str:
-        auth_header = request.headers.get("authorization")
-        if auth_header:
-            parts = auth_header.strip().split()
-            if len(parts) == 2 and parts[0].lower() == "bearer":
-                token_str = parts[1]
-            elif len(parts) == 1:
-                token_str = parts[0]
+        token_str = extract_bearer_token(request.headers.get("authorization"))
 
     if token_str and token_str.count(".") == 2:
         try:

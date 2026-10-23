@@ -67,6 +67,14 @@ const DEFAULT_TEMPLATES = {
   c: `#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    // Write your solution here\n    return 0;\n}\n`,
 };
 
+function getBoilerplateCode(lang, templates) {
+  if (!lang) return "";
+  const foundTmpl = templates?.find(
+    (t) => t.language?.toLowerCase() === lang.toLowerCase()
+  );
+  return foundTmpl?.boilerplate_code || DEFAULT_TEMPLATES[lang] || "";
+}
+
 export default function ProblemDetailPage() {
   const routeParams = useParams();
   const problemId = routeParams?.id;
@@ -86,6 +94,10 @@ export default function ProblemDetailPage() {
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
   const editorRef = useRef(null);
+  const languageRef = useRef(language);
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   // Layout & Resizing State
   const [leftWidth, setLeftWidth] = useState(42); // percentage
@@ -160,14 +172,7 @@ export default function ProblemDetailPage() {
         setSampleCases(samples);
 
         // Check if starter template exists for initial language
-        const foundTmpl = full.templates?.find(
-          (t) => t.language?.toLowerCase() === language.toLowerCase()
-        );
-        if (foundTmpl?.boilerplate_code) {
-          setCode(foundTmpl.boilerplate_code);
-        } else {
-          setCode(DEFAULT_TEMPLATES[language] || "");
-        }
+        setCode(getBoilerplateCode(languageRef.current, full.templates));
       } catch (err) {
         if (!isMounted) return;
         try {
@@ -272,14 +277,7 @@ export default function ProblemDetailPage() {
     setLanguage(newLangId);
     setLangDropdownOpen(false);
 
-    const foundTmpl = problemData?.templates?.find(
-      (t) => t.language?.toLowerCase() === newLangId.toLowerCase()
-    );
-    if (foundTmpl?.boilerplate_code) {
-      setCode(foundTmpl.boilerplate_code);
-    } else {
-      setCode(DEFAULT_TEMPLATES[newLangId] || "");
-    }
+    setCode(getBoilerplateCode(newLangId, problemData?.templates));
   };
 
   // Reset editor to starter template
@@ -291,10 +289,7 @@ export default function ProblemDetailPage() {
     ) {
       return;
     }
-    const foundTmpl = problemData?.templates?.find(
-      (t) => t.language?.toLowerCase() === language.toLowerCase()
-    );
-    setCode(foundTmpl?.boilerplate_code || DEFAULT_TEMPLATES[language] || "");
+    setCode(getBoilerplateCode(language, problemData?.templates));
   };
 
   // Add custom test case (FOR RUN ONLY)

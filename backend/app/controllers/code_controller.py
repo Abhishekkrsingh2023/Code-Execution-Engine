@@ -13,14 +13,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.problem import Problem
 from app.models.problem_template import CommonProblemTemplate
 from app.models.submission import Submission, SubmissionLanguage, SubmissionStatus
 from app.models.test_case import TestCase as TestCaseModel
 from app.models.user import User
 from app.redis_client import get_async_redis_client
 from app.schemas.submission import ExecutionMode, SubmissionRequest, TestCase
-from app.services.leaderboard_service import record_submission_completion, resolve_problem_id
+from app.services.leaderboard_service import (
+    find_problem_by_id_or_title,
+    record_submission_completion,
+    resolve_problem_id,
+)
 
 redis_client = get_async_redis_client()
 
@@ -46,18 +49,12 @@ async def load_problem_test_cases(
     if db is None:
         return [], None, None
 
-    cleaned = str(problem_id_val).strip()
-    problem: Problem | None = None
-
-    if cleaned.isdigit():
-        stmt = select(Problem).where(Problem.id == int(cleaned), Problem.is_deleted.is_(False))
-        problem = (await db.execute(stmt)).scalar_one_or_none()
-
-    if problem is None:
-        stmt = select(Problem).where(Problem.title.ilike(cleaned), Problem.is_deleted.is_(False))
-        problem = (await db.execute(stmt)).scalars().first()
-
-    code_id = problem.id if problem else (int(cleaned) if cleaned.isdigit() else None)
+    problem = await find_problem_by_id_or_title(problem_id_val, db)
+    code_id = (
+        problem.id
+        if problem
+        else (int(cleaned) if (cleaned := str(problem_id_val).strip()).isdigit() else None)
+    )
     common_tmpl = None
     if code_id is not None:
         stmt_common = select(CommonProblemTemplate).where(
@@ -75,66 +72,21 @@ async def load_problem_test_cases(
         )
 
     raw_cases: list[dict] = []
-    if mode == "submit":
-        if problem:
-            stmt_tcs = select(TestCaseModel).where(TestCaseModel.problem_id == problem.id)
-            db_tcs = (await db.execute(stmt_tcs)).scalars().all()
+    if problem:
+        stmt_tcs = select(TestCaseModel).where(TestCaseModel.problem_id == problem.id)
+        db_tcs = (await db.execute(stmt_tcs)).scalars().all()
+        if mode == "submit":
             hidden_tcs = [tc for tc in db_tcs if not tc.is_sample]
-            if hidden_tcs:
-                raw_cases = [
-                    {
-                        "id": tc.id,
-                        "input": tc.input,
-                        "expected_output": tc.expected_output,
-                        "weight": tc.weight,
-                    }
-                    for tc in hidden_tcs
-                ]
-            elif db_tcs:
-                raw_cases = [
-                    {
-                        "id": tc.id,
-                        "input": tc.input,
-                        "expected_output": tc.expected_output,
-                        "weight": tc.weight,
-                    }
-                    for tc in db_tcs
-                ]
-        if not raw_cases and common_tmpl:
-            if common_tmpl.submit_test_cases:
-                raw_cases = list(common_tmpl.submit_test_cases)
-            elif common_tmpl.run_test_cases:
-                raw_cases = list(common_tmpl.run_test_cases)
-    else:  # mode == "run"
-        if problem:
-            stmt_tcs = select(TestCaseModel).where(TestCaseModel.problem_id == problem.id)
-            db_tcs = (await db.execute(stmt_tcs)).scalars().all()
+            selected = hidden_tcs if hidden_tcs else db_tcs
+        else:
             sample_tcs = [tc for tc in db_tcs if tc.is_sample]
-            if sample_tcs:
-                raw_cases = [
-                    {
-                        "id": tc.id,
-                        "input": tc.input,
-                        "expected_output": tc.expected_output,
-                        "weight": tc.weight,
-                    }
-                    for tc in sample_tcs
-                ]
-            elif db_tcs:
-                raw_cases = [
-                    {
-                        "id": tc.id,
-                        "input": tc.input,
-                        "expected_output": tc.expected_output,
-                        "weight": tc.weight,
-                    }
-                    for tc in db_tcs
-                ]
-        if not raw_cases and common_tmpl:
-            if common_tmpl.run_test_cases:
-                raw_cases = list(common_tmpl.run_test_cases)
-            elif common_tmpl.submit_test_cases:
-                raw_cases = list(common_tmpl.submit_test_cases)
+            selected = sample_tcs if sample_tcs else db_tcs
+        raw_cases = [tc.to_dict() for tc in selected]
+
+    if not raw_cases and common_tmpl:
+        primary = common_tmpl.submit_test_cases if mode == "submit" else common_tmpl.run_test_cases
+        fallback = common_tmpl.run_test_cases if mode == "submit" else common_tmpl.submit_test_cases
+        raw_cases = list(primary or fallback or [])
 
     test_cases = [
         TestCase(
@@ -313,7 +265,6 @@ async def handle_run_code_request(
     current_user: User | None = None,
     db: AsyncSession | None = None,
 ) -> dict[str, Any]:
-    submission.mode = ExecutionMode.run
     return await handle_code_execution_request(
         submission=submission,
         mode="run",
