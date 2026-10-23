@@ -10,14 +10,14 @@ const TEAM_MEMBERS = [
     name: "Abhishek Kumar Singh",
     handle: "@abhishek",
     role: "Lead Systems Architect & Backend Engineer",
-    image: "/team/abhishek.jpg",
+    image: "/team/Abhishek.webp",
     bio: "Passionate about distributed systems and scalable backends. Built Code0’s Docker judge, async worker pipeline, and secure execution runtime.",
     contributions: [
       "Built a resource-limited, multi-language Docker execution sandbox",
       "Developed Redis-backed async task dispatch with distributed workers",
       "Designed secure database schemas, RBAC, and unified API contracts",
     ],
-    skills: ["Python", "Nodejs", "FastAPI", "Express","Docker", "PostgreSQL", "Redis","Nginx"],
+    skills: ["Python", "Nodejs", "FastAPI", "Express", "Docker", "PostgreSQL", "Redis", "Nginx"],
     socials: {
       github: "https://github.com/Abhishekkrsingh2023",
       linkedin: "#",
@@ -29,18 +29,18 @@ const TEAM_MEMBERS = [
     name: "Akash Kumar",
     handle: "@akash",
     role: "Full-Stack Product Architect",
-    image: "/team/buddy.jpg",
+    image: "/team/Akash.webp",
     bio: "Focused on developer experience and modern web architecture. Built Code0’s Monaco IDE, real-time leaderboard, and responsive UI.",
     contributions: [
       "Built a responsive Next.js interface.",
       "Integrated Monaco Editor, code execution, and test-case views",
       "Implemented paginated leaderboards and competitive scoring",
     ],
-    skills: ["Python","Nodejs","Next.js", "React", ".NET", "Node.js", "UI/UX"],
+    skills: ["Python", "Nodejs", "Next.js", "React", ".NET", "Node.js", "UI/UX"],
     socials: {
       github: "https://github.com/godzaryan",
       linkedin: "#",
-      email: "mailto:buddy@example.com",
+      email: "mailto:cronoquillgamers2018@gmail.com",
     },
   },
 ];
