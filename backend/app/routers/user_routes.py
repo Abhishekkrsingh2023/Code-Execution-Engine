@@ -14,6 +14,7 @@ from app.controllers.user_controller import (
 )
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.limiter import limiter
 from app.models.user import User
 from app.schemas.user import (
     MessageResponse,
@@ -48,7 +49,9 @@ router = APIRouter(
         500: {"description": "Internal server error during user creation."},
     },
 )
+@limiter.limit("10/minute")
 async def register_user(
+    request: Request,
     payload: UserRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
@@ -87,7 +90,9 @@ async def register_user(
         },
     },
 )
+@limiter.limit("10/minute")
 async def login_user(
+    request: Request,
     payload: UserLoginRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -181,7 +186,9 @@ async def update_current_user_profile(
         500: {"description": "Failed to generate OTP."},
     },
 )
+@limiter.limit("5/minute")
 async def request_otp(
+    request: Request,
     payload: RequestOTPRequest,
     db: AsyncSession = Depends(get_db),
 ) -> OTPResponse:
