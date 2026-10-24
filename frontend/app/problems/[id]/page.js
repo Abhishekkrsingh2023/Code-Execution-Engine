@@ -8,7 +8,10 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { useAuth } from "@/lib/AuthContext";
-import MarkdownRenderer from "@/components/MarkdownRenderer";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
 
 // Dynamically import Monaco Editor with SSR disabled
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -675,8 +678,13 @@ export default function ProblemDetailPage() {
             </div>
 
             {/* Problem Description Body */}
-            <div className="text-xs sm:text-[13px] text-slate-300 leading-relaxed font-normal">
-              <MarkdownRenderer content={prob.description} />
+            <div className="markdown-content text-xs sm:text-[13px] text-slate-300 leading-relaxed font-normal">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
+              >
+                {prob.description || ""}
+              </ReactMarkdown>
             </div>
 
             {/* Fallback Examples Section (only shown if not provided in markdown description) */}
@@ -753,17 +761,15 @@ export default function ProblemDetailPage() {
         {/* ========================================================= */}
         <div
           onPointerDown={() => setIsDraggingH(true)}
-          className={`hidden lg:flex w-2 cursor-col-resize items-center justify-center transition-all z-20 shrink-0 select-none py-6 group ${
-            isDraggingH ? "w-2" : ""
-          }`}
+          className={`hidden lg:flex w-2 cursor-col-resize items-center justify-center transition-all z-20 shrink-0 select-none py-6 group ${isDraggingH ? "w-2" : ""
+            }`}
           title="Drag to resize panel"
         >
           <div
-            className={`w-1 h-8 rounded-full transition-all ${
-              isDraggingH
+            className={`w-1 h-8 rounded-full transition-all ${isDraggingH
                 ? "bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.9)] w-1.5"
                 : "bg-slate-700/50 group-hover:bg-indigo-400 group-hover:w-1.5"
-            }`}
+              }`}
           />
         </div>
 
@@ -787,8 +793,8 @@ export default function ProblemDetailPage() {
                       key={lang.id}
                       onClick={() => handleLanguageChange(lang.id)}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${isSelected
-                          ? "bg-[#111628] text-white border border-indigo-500/50 shadow-xs"
-                          : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+                        ? "bg-[#111628] text-white border border-indigo-500/50 shadow-xs"
+                        : "bg-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
                         }`}
                     >
                       <Image
@@ -820,8 +826,8 @@ export default function ProblemDetailPage() {
                           key={lang.id}
                           onClick={() => handleLanguageChange(lang.id)}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors ${language === lang.id
-                              ? "bg-indigo-600/20 text-indigo-300 font-semibold"
-                              : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
+                            ? "bg-indigo-600/20 text-indigo-300 font-semibold"
+                            : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
                             }`}
                         >
                           <Image
@@ -942,17 +948,15 @@ export default function ProblemDetailPage() {
           {/* ========================================================= */}
           <div
             onPointerDown={() => setIsDraggingV(true)}
-            className={`h-2 w-full cursor-row-resize flex items-center justify-center transition-all z-20 shrink-0 select-none group ${
-              isDraggingV ? "h-2" : ""
-            }`}
+            className={`h-2 w-full cursor-row-resize flex items-center justify-center transition-all z-20 shrink-0 select-none group ${isDraggingV ? "h-2" : ""
+              }`}
             title="Drag to resize test-case panel"
           >
             <div
-              className={`h-1 w-10 rounded-full transition-all ${
-                isDraggingV
+              className={`h-1 w-10 rounded-full transition-all ${isDraggingV
                   ? "bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.9)] h-1.5"
                   : "bg-slate-700/50 group-hover:bg-indigo-400 group-hover:h-1.5"
-              }`}
+                }`}
             />
           </div>
 
@@ -963,9 +967,8 @@ export default function ProblemDetailPage() {
             style={{
               height: isTestcaseCollapsed ? "38px" : `${testcaseHeight}px`,
             }}
-            className={`flex flex-col bg-[#0a0d14] border border-white/[0.08] rounded-2xl shadow-lg shadow-black/40 overflow-hidden relative shrink-0 hover:border-white/[0.14] transition-colors ${
-              isDraggingV ? "" : "transition-[height] duration-200 ease-out"
-            }`}
+            className={`flex flex-col bg-[#0a0d14] border border-white/[0.08] rounded-2xl shadow-lg shadow-black/40 overflow-hidden relative shrink-0 hover:border-white/[0.14] transition-colors ${isDraggingV ? "" : "transition-[height] duration-200 ease-out"
+              }`}
           >
             {/* Header: Tabs + Actions (Add Test Case, Run All, Collapse) */}
             <div className="h-9.5 sm:h-10 bg-[#0d121f] border-b border-white/[0.08] px-3 sm:px-3.5 flex items-center justify-between shrink-0">
@@ -978,8 +981,8 @@ export default function ProblemDetailPage() {
                     setIsTestcaseCollapsed(false);
                   }}
                   className={`relative h-full flex items-center text-xs font-semibold transition-colors ${activeTab === "testcases"
-                      ? "text-white"
-                      : "text-slate-400 hover:text-white"
+                    ? "text-white"
+                    : "text-slate-400 hover:text-white"
                     }`}
                 >
                   <span>Test Cases</span>
@@ -995,8 +998,8 @@ export default function ProblemDetailPage() {
                     setIsTestcaseCollapsed(false);
                   }}
                   className={`relative h-full flex items-center text-xs font-semibold transition-colors ${activeTab === "custom_input"
-                      ? "text-white"
-                      : "text-slate-400 hover:text-white"
+                    ? "text-white"
+                    : "text-slate-400 hover:text-white"
                     }`}
                 >
                   <span>Custom Input</span>
@@ -1013,16 +1016,16 @@ export default function ProblemDetailPage() {
                       setIsTestcaseCollapsed(false);
                     }}
                     className={`relative h-full flex items-center gap-1.5 text-xs font-semibold transition-colors ${activeTab === "result"
-                        ? "text-white"
-                        : "text-slate-400 hover:text-white"
+                      ? "text-white"
+                      : "text-slate-400 hover:text-white"
                       }`}
                   >
                     <span>Results</span>
                     <span
                       className={`w-2 h-2 rounded-full ${execResult.status === "completed" ||
-                          execResult.status === "accepted"
-                          ? "bg-emerald-400"
-                          : "bg-rose-400"
+                        execResult.status === "accepted"
+                        ? "bg-emerald-400"
+                        : "bg-rose-400"
                         }`}
                     />
                     {activeTab === "result" && (
@@ -1128,8 +1131,8 @@ export default function ProblemDetailPage() {
                             setExpandedCaseId(isExpanded ? null : tc.displayIdx)
                           }
                           className={`rounded-lg border transition-all cursor-pointer ${isExpanded
-                              ? "bg-[#0d1222] border-indigo-500/40 shadow-sm"
-                              : "bg-[#0b0e17] hover:bg-[#0e1322] border-white/[0.06]"
+                            ? "bg-[#0d1222] border-indigo-500/40 shadow-sm"
+                            : "bg-[#0b0e17] hover:bg-[#0e1322] border-white/[0.06]"
                             }`}
                         >
                           {/* Row Summary */}
@@ -1268,9 +1271,9 @@ export default function ProblemDetailPage() {
                       <div className="flex items-center gap-2.5">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${execResult.status === "accepted" ||
-                              execResult.status === "completed"
-                              ? "bg-emerald-950/60 border border-emerald-700 text-emerald-300"
-                              : "bg-rose-950/60 border border-rose-700 text-rose-300"
+                            execResult.status === "completed"
+                            ? "bg-emerald-950/60 border border-emerald-700 text-emerald-300"
+                            : "bg-rose-950/60 border border-rose-700 text-rose-300"
                             }`}
                         >
                           {execResult.status}
