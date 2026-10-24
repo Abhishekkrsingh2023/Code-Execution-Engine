@@ -18,13 +18,8 @@ from app.routers import (
     user_routes,
 )
 from app.utils.audit_logger import setup_audit_logger
+from app.config import settings
 
-# # Suppress harmless CPython 3.13 resource_tracker warning on reloader SIGTERM shutdown
-# warnings.filterwarnings(
-#     "ignore",
-#     category=UserWarning,
-#     module="multiprocessing.resource_tracker",
-# )
 
 
 @asynccontextmanager
@@ -55,15 +50,11 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+ALLOWED_ORIGINS = settings.ALLOWED_ORIGINS.split(',')
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

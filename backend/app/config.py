@@ -1,3 +1,9 @@
+"""Settings for the application.
+Contains the applications needed configurations and settings
+"""
+
+
+
 import pathlib
 import warnings
 
@@ -17,6 +23,9 @@ class Settings(BaseSettings):
     POOL_SIZE: int = 10
     MAX_OVERFLOW: int = 20
     POOL_RECYCLE: int = 1800
+
+    # Allowed ORIGINS
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # Code Execution and Storage
     CODE_BASE_DIR: str | None = None

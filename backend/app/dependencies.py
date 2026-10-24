@@ -1,3 +1,13 @@
+"""FastAPI dependencies for authentication and authorization.
+
+These dependencies handle user authentication and authorization for API routes.
+They provide the following functionalities:
+1. Extract and validate JWT access token from cookies or headers.
+2. Verify that the user account is active and not suspended.
+3. Check if the user has the required role (admin, moderator, or user).
+"""
+
+
 import uuid
 from typing import Annotated
 
