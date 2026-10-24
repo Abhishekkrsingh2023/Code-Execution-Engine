@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 """Unified development runner for Code Zero.
 
 Starts FastAPI backend, Redis code-execution worker, and Next.js frontend simultaneously
-using `asyncer` for structured concurrency, type-safe background task spawning, and clean teardown.
+using only Python built-in standard libraries (asyncio, os, signal, socket, subprocess).
 """
 
 import asyncio
@@ -12,9 +11,6 @@ import signal
 import socket
 import sys
 from pathlib import Path
-
-import anyio
-import asyncer
 
 # ANSI Color Codes
 CYAN = "\033[0;36m"
@@ -52,7 +48,7 @@ async def stream_output(stream: asyncio.StreamReader | None, prefix: str) -> Non
                 break
             decoded = line.decode("utf-8", errors="replace").rstrip("\r\n")
             print(f"{prefix} {decoded}", flush=True)
-    except (asyncio.CancelledError, anyio.get_cancelled_exc_class()):
+    except asyncio.CancelledError:
         pass
 
 
@@ -71,64 +67,86 @@ def kill_process_tree(proc: asyncio.subprocess.Process, sig: signal.Signals) -> 
 
 
 async def monitor_process(
-    proc: asyncio.subprocess.Process, name: str, tg: asyncer.TaskGroup
+    proc: asyncio.subprocess.Process, name: str, shutdown_event: asyncio.Event
 ) -> None:
-    """Monitors a process and triggers task-group cancellation if it exits unexpectedly."""
+    """Monitors a process and triggers shutdown if it exits unexpectedly."""
     try:
         code = await proc.wait()
-        if tg.cancel_scope.cancel_called:
-            return
-        print(
-            f"\n{YELLOW}{name} exited with code {code}. Stopping remaining services...{RESET}",
-            flush=True,
-        )
-        tg.cancel_scope.cancel()
-    except (asyncio.CancelledError, anyio.get_cancelled_exc_class()):
-        pass
-
-
-async def signal_watcher(tg: asyncer.TaskGroup) -> None:
-    """Catches OS interrupt signals and requests structured task-group cancellation."""
-    try:
-        with anyio.open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
-            async for sig in signals:
-                print(
-                    f"\n{BOLD}{MAGENTA}Received {sig.name}, shutting down all services...{RESET}",
-                    flush=True,
-                )
-                tg.cancel_scope.cancel()
-                return
-    except (asyncio.CancelledError, anyio.get_cancelled_exc_class()):
+        if not shutdown_event.is_set():
+            print(
+                f"\n{YELLOW}{name} exited with code {code}. Stopping remaining services...{RESET}",
+                flush=True,
+            )
+            shutdown_event.set()
+    except asyncio.CancelledError:
         pass
 
 
 async def check_prerequisites() -> None:
     """Verifies installed CLI tools and backing services concurrently."""
     if not shutil.which("uv"):
-        print(f"{RED}{BOLD}Error:{RESET} 'uv' is not installed or not in PATH.", file=sys.stderr)
-        print("Please install uv: curl -LsSf https://astral.sh/uv/install.sh | sh", file=sys.stderr)
+        print(
+            f"{RED}{BOLD}Error:{RESET} 'uv' is not installed or not in PATH.",
+            file=sys.stderr,
+        )
+        print(
+            "Please install uv: curl -LsSf https://astral.sh/uv/install.sh | sh",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     if not shutil.which("bun"):
-        print(f"{RED}{BOLD}Error:{RESET} 'bun' is not installed or not in PATH.", file=sys.stderr)
-        print("Please install bun: curl -fsSL https://bun.sh/install | bash", file=sys.stderr)
+        print(
+            f"{RED}{BOLD}Error:{RESET} 'bun' is not installed or not in PATH.",
+            file=sys.stderr,
+        )
+        print(
+            "Please install bun: curl -fsSL https://bun.sh/install | bash",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     print(f"\n{BOLD}Checking backing services (PostgreSQL & Redis)...{RESET}")
-    async with asyncer.create_task_group() as tg:
-        pg_task = tg.soonify(asyncer.asyncify(check_tcp_port))("127.0.0.1", 5432)
-        redis_task = tg.soonify(asyncer.asyncify(check_tcp_port))("127.0.0.1", 6379)
+    pg_reachable, redis_reachable = await asyncio.gather(
+        asyncio.to_thread(check_tcp_port, "127.0.0.1", 5432),
+        asyncio.to_thread(check_tcp_port, "127.0.0.1", 6379),
+    )
 
-    if not pg_task.value:
+    has_service_errors = False
+    if not pg_reachable:
         print(
-            f"{YELLOW}Warning: PostgreSQL does not appear to be reachable on port 5432.{RESET}\n"
-            f"You can start it with: {BOLD}docker compose up -d postgres{RESET}"
+            f"{RED}{BOLD}Error:{RESET} PostgreSQL is not reachable on port 5432.\n"
+            f"Start it with: {BOLD}docker compose up -d postgres{RESET}\n",
+            file=sys.stderr,
         )
-    if not redis_task.value:
+        has_service_errors = True
+
+    if not redis_reachable:
         print(
-            f"{YELLOW}Warning: Redis does not appear to be reachable on port 6379.{RESET}\n"
-            f"You can start it with: {BOLD}docker compose up -d redis{RESET}"
+            f"{RED}{BOLD}Error:{RESET} Redis is not reachable on port 6379.\n"
+            f"Start it with: {BOLD}docker compose up -d redis{RESET}\n",
+            file=sys.stderr,
         )
+        has_service_errors = True
+
+    if has_service_errors:
+        print(
+            f"{RED}{BOLD}Startup aborted:{RESET} Required backing services are offline.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+async def run_subprocess_cmd(cmd: list[str], cwd: Path) -> None:
+    """Runs a subprocess command and aborts startup if it fails."""
+    proc = await asyncio.create_subprocess_exec(*cmd, cwd=cwd)
+    code = await proc.wait()
+    if code != 0:
+        print(
+            f"\n{RED}{BOLD}Error:{RESET} Command '{' '.join(cmd)}' failed with exit code {code}. Aborting startup.",
+            file=sys.stderr,
+        )
+        sys.exit(code)
 
 
 async def main() -> None:
@@ -141,22 +159,34 @@ async def main() -> None:
 
     # 2. Apply Database Migrations
     print(f"\n{BOLD}Ensuring database migrations are up to date...{RESET}")
-    await anyio.run_process(["uv", "run", "alembic", "upgrade", "head"], cwd=BACKEND_DIR)
+    await run_subprocess_cmd(
+        ["uv", "run", "alembic", "upgrade", "head"], cwd=BACKEND_DIR
+    )
 
     # 3. Ensure Frontend Dependencies
     if not (FRONTEND_DIR / "node_modules").is_dir():
         print(f"\n{BOLD}Installing frontend dependencies with bun...{RESET}")
-        await anyio.run_process(["bun", "install"], cwd=FRONTEND_DIR)
+        await run_subprocess_cmd(["bun", "install"], cwd=FRONTEND_DIR)
 
     # Set up environment with PYTHONPATH
     env = os.environ.copy()
-    env["PYTHONPATH"] = f"{BACKEND_DIR}:{WORKER_DIR}:{ROOT_DIR}:{env.get('PYTHONPATH', '')}"
+    env["PYTHONPATH"] = (
+        f"{BACKEND_DIR}:{WORKER_DIR}:{ROOT_DIR}:{env.get('PYTHONPATH', '')}"
+    )
 
     print(f"\n{BOLD}Starting services...{RESET}")
-    print(f"  - {CYAN}{BOLD}[backend]{RESET}  FastAPI API Server     -> http://localhost:8000")
-    print(f"  - {CYAN}{BOLD}[docs]{RESET}     Swagger API Docs       -> http://localhost:8000/docs")
-    print(f"  - {YELLOW}{BOLD}[worker]{RESET}   Code Execution Worker  -> Listening on Redis queue")
-    print(f"  - {GREEN}{BOLD}[frontend]{RESET} Next.js Web App        -> http://localhost:3000")
+    print(
+        f"  - {CYAN}{BOLD}[backend]{RESET}  FastAPI API Server     -> http://localhost:8000"
+    )
+    print(
+        f"  - {CYAN}{BOLD}[docs]{RESET}     Swagger API Docs       -> http://localhost:8000/docs"
+    )
+    print(
+        f"  - {YELLOW}{BOLD}[worker]{RESET}   Code Execution Worker  -> Listening on Redis queue"
+    )
+    print(
+        f"  - {GREEN}{BOLD}[frontend]{RESET} Next.js Web App        -> http://localhost:3000"
+    )
     print(f"\n{BOLD}Press [Ctrl+C] to stop all services simultaneously.{RESET}\n")
 
     # Start child processes in new process groups for clean process tree termination
@@ -203,32 +233,59 @@ async def main() -> None:
         ("Next.js Frontend", frontend_proc),
     ]
 
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    def _signal_handler(sig_name: str) -> None:
+        print(
+            f"\n{BOLD}{MAGENTA}Received {sig_name}, shutting down all services...{RESET}",
+            flush=True,
+        )
+        shutdown_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _signal_handler, sig.name)
+        except NotImplementedError:
+            pass
+
+    # Background tasks for streaming output and process monitoring
+    tasks: list[asyncio.Task] = [
+        asyncio.create_task(
+            stream_output(backend_proc.stdout, f"{CYAN}[backend]{RESET} ")
+        ),
+        asyncio.create_task(
+            stream_output(worker_proc.stdout, f"{YELLOW}[worker]{RESET}  ")
+        ),
+        asyncio.create_task(
+            stream_output(frontend_proc.stdout, f"{GREEN}[frontend]{RESET}")
+        ),
+    ]
+
+    for name, proc in processes:
+        tasks.append(asyncio.create_task(monitor_process(proc, name, shutdown_event)))
+
     try:
-        # Structured concurrency using asyncer TaskGroup
-        async with asyncer.create_task_group() as tg:
-            # 1. Output streams
-            tg.soonify(stream_output)(backend_proc.stdout, f"{CYAN}[backend]{RESET} ")
-            tg.soonify(stream_output)(worker_proc.stdout, f"{YELLOW}[worker]{RESET}  ")
-            tg.soonify(stream_output)(frontend_proc.stdout, f"{GREEN}[frontend]{RESET}")
-
-            # 2. Process exit monitors
-            for name, proc in processes:
-                tg.soonify(monitor_process)(proc, name, tg)
-
-            # 3. OS Signal listener (SIGINT, SIGTERM)
-            tg.soonify(signal_watcher)(tg)
+        await shutdown_event.wait()
     finally:
         print(f"\n{BOLD}{MAGENTA}Shutting down all services...{RESET}", flush=True)
 
-        # Terminate all child process groups
+        # Cancel streaming and monitoring tasks
+        for task in tasks:
+            task.cancel()
+
+        # Terminate all child process groups with SIGTERM
         for _, proc in processes:
             kill_process_tree(proc, signal.SIGTERM)
 
-        # Allow up to 3 seconds for graceful exit, then force kill
-        with anyio.move_on_after(3.0):
-            for _, proc in processes:
-                if proc.returncode is None:
-                    await proc.wait()
+        # Allow up to 3 seconds for graceful exit, then SIGKILL
+        try:
+            async with asyncio.timeout(3.0):
+                for _, proc in processes:
+                    if proc.returncode is None:
+                        await proc.wait()
+        except TimeoutError:
+            pass
 
         for _, proc in processes:
             if proc.returncode is None:
@@ -239,6 +296,6 @@ async def main() -> None:
 
 if __name__ == "__main__":
     try:
-        asyncer.runnify(main)()
+        asyncio.run(main())
     except KeyboardInterrupt:
         pass
