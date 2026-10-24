@@ -1,11 +1,11 @@
 import uuid
+from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import get_db
+from app.database import SessionDep
 from app.models.user import User, UserRole, UserStatus
 from app.utils.jwt import verify_access_token
 from app.utils.security import extract_bearer_token
@@ -13,8 +13,8 @@ from app.utils.security import extract_bearer_token
 
 async def get_current_user(
     request: Request,
-    authorization: str | None = Header(None, description="Bearer JWT access token"),
-    db: AsyncSession = Depends(get_db),
+    db: SessionDep,
+    authorization: Annotated[str | None, Header(description="Bearer JWT access token")] = None,
 ) -> User:
     """Dependency to extract and validate the authenticated user from request cookies or headers.
 
@@ -82,8 +82,11 @@ async def get_current_user(
     return user
 
 
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
 async def require_admin(
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> User:
     """Dependency that restricts endpoint access strictly to administrators.
 
@@ -97,8 +100,11 @@ async def require_admin(
     return current_user
 
 
+AdminUserDep = Annotated[User, Depends(require_admin)]
+
+
 async def require_moderator_or_admin(
-    current_user: User = Depends(get_current_user),
+    current_user: CurrentUserDep,
 ) -> User:
     """Dependency that restricts endpoint access to moderators and administrators.
 
@@ -112,10 +118,13 @@ async def require_moderator_or_admin(
     return current_user
 
 
+ModeratorUserDep = Annotated[User, Depends(require_moderator_or_admin)]
+
+
 async def get_current_user_optional(
     request: Request,
-    authorization: str | None = Header(None, description="Bearer JWT access token"),
-    db: AsyncSession = Depends(get_db),
+    db: SessionDep,
+    authorization: Annotated[str | None, Header(description="Bearer JWT access token")] = None,
 ) -> User | None:
     """Dependency that extracts current user if authenticated, or None if anonymous/unauthenticated."""
     try:
@@ -126,3 +135,6 @@ async def get_current_user_optional(
         )
     except HTTPException:
         return None
+
+
+CurrentUserOptionalDep = Annotated[User | None, Depends(get_current_user_optional)]
