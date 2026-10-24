@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -26,31 +26,27 @@ function RegisterContent() {
   const [error, setError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
 
-  // Debounced username availability check
-  useEffect(() => {
-    if (!formData.username || formData.username.trim().length < 3) {
+  // Check username availability on demand
+  const handleCheckUsername = async () => {
+    const username = formData.username.trim();
+    if (!username || username.length < 3) {
       return;
     }
 
-    const timer = setTimeout(async () => {
-      setUsernameStatus({ checking: true });
-      try {
-        const res = await api.get(
-          `/api-v1/users/check-username/${encodeURIComponent(
-            formData.username.trim()
-          )}`
-        );
-        setUsernameStatus({
-          checking: false,
-          available: res.is_available ?? res.available,
-        });
-      } catch {
-        setUsernameStatus(null);
-      }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [formData.username]);
+    setUsernameStatus({ checking: true });
+    try {
+      const res = await api.get(
+        `/api-v1/users/check-username/${encodeURIComponent(username)}`
+      );
+      setUsernameStatus({
+        checking: false,
+        available: res.is_available ?? res.available,
+      });
+    } catch {
+      setUsernameStatus(null);
+      setError("Unable to check username availability. Please try again.");
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -66,7 +62,11 @@ function RegisterContent() {
       return;
     }
 
-    if (usernameStatus && !usernameStatus.available && !usernameStatus.checking) {
+    if (usernameStatus?.checking) {
+      return;
+    }
+
+    if (usernameStatus && !usernameStatus.available) {
       setError("Username is already taken or invalid. Please choose another.");
       return;
     }
@@ -234,22 +234,46 @@ function RegisterContent() {
                     </span>
                   )}
                 </div>
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  required
-                  value={formData.username}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFormData({ ...formData, username: val });
-                    if (!val || val.trim().length < 3) {
-                      setUsernameStatus(null);
+                <div className="flex items-center gap-2">
+                  <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    required
+                    value={formData.username}
+                    onChange={(e) => {
+                      setFormData({ ...formData, username: e.target.value });
+                      if (usernameStatus) {
+                        setUsernameStatus(null);
+                      }
+                    }}
+                    placeholder="e.g. alex_coder"
+                    className="flex-1 min-w-0 px-4 py-2.5 bg-[#07090e]/80 border border-white/10 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 text-sm transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCheckUsername}
+                    disabled={
+                      !formData.username ||
+                      formData.username.trim().length < 3 ||
+                      Boolean(usernameStatus?.checking)
                     }
-                  }}
-                  placeholder="e.g. alex_coder"
-                  className="w-full px-4 py-2.5 bg-[#07090e]/80 border border-white/10 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 text-sm transition-all"
-                />
+                    className="px-3.5 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 hover:border-indigo-500/50 rounded-xl text-xs font-semibold transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                    title="Check username availability"
+                  >
+                    {usernameStatus?.checking ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin" />
+                        <span>Checking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="hidden sm:inline">Check Availability</span>
+                        <span className="sm:hidden">Check</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Email Field */}
@@ -323,7 +347,7 @@ function RegisterContent() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || Boolean(usernameStatus?.checking)}
                 className="w-full mt-6 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
               >
                 {loading ? (
