@@ -11,6 +11,7 @@ function isPublicRoute(pathname) {
     path === "/" ||
     path === "/login" ||
     path === "/register" ||
+    path === "/verify" ||
     path === "/about" ||
     path === "/abouts" ||
     path === "/leaderboard" ||
@@ -31,7 +32,7 @@ export default function AuthGuard({ children }) {
 
     const path = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
     const isPublic = isPublicRoute(path);
-    const isAuthPage = path === "/login" || path === "/register";
+    const isAuthPage = path === "/login" || path === "/register" || (path === "/verify" && user?.is_email_verified);
 
     // If not authenticated and visiting a protected route -> redirect to /login
     if (!user && !isPublic) {

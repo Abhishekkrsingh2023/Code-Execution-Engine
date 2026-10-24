@@ -9,6 +9,8 @@ const AuthContext = createContext({
   loading: true,
   login: async () => {},
   loginWithOtp: async () => {},
+  verifyOtp: async () => {},
+  requestOtp: async () => {},
   register: async () => {},
   logout: async () => {},
   refreshUser: async () => {},
@@ -115,6 +117,10 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const requestOtp = async (email) => {
+    return await api.post("/api-v1/users/otp/request", { email });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -122,6 +128,8 @@ export function AuthProvider({ children }) {
         loading,
         login,
         loginWithOtp,
+        verifyOtp: loginWithOtp,
+        requestOtp,
         register,
         logout,
         refreshUser,

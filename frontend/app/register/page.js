@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { api } from "@/lib/api";
 import { APP_NAME } from "@/lib/config";
 
-export default function RegisterPage() {
+function RegisterContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectPath = searchParams.get("redirect") || "";
   const { register } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -22,7 +24,7 @@ export default function RegisterPage() {
   const [usernameStatus, setUsernameStatus] = useState(null); // { available: bool, checking: bool }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
   // Debounced username availability check
   useEffect(() => {
@@ -77,13 +79,15 @@ export default function RegisterPage() {
         formData.email.trim(),
         formData.password
       );
-      setSuccess(true);
+      setRedirecting(true);
+      const emailParam = encodeURIComponent(formData.email.trim());
+      const redirectQuery = redirectPath ? `&redirect=${encodeURIComponent(redirectPath)}` : "";
+      router.push(`/verify?email=${emailParam}${redirectQuery}`);
     } catch (err) {
       setError(
         err.message ||
           "Registration failed. Email or username might already be in use."
       );
-    } finally {
       setLoading(false);
     }
   };
@@ -162,38 +166,27 @@ export default function RegisterPage() {
           {/* Top subtle glowing accent bar */}
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
 
-          {success ? (
-            <div className="text-center py-4 space-y-5">
-              <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-2xl border border-emerald-500/30 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/40">
-                <svg
-                  className="w-7 h-7"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+          {redirecting ? (
+            <div className="text-center py-6 space-y-5">
+              <div className="w-14 h-14 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30 flex items-center justify-center mx-auto shadow-lg shadow-indigo-950/40">
+                <div className="w-7 h-7 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
               </div>
               <div className="space-y-1.5">
                 <h2 className="text-xl font-bold text-white tracking-tight">
-                  Account Created Successfully!
+                  Account Created!
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                  Your profile has been created. You can now sign in using your credentials or verify via email OTP.
+                  Taking you to the email verification page...
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => router.push("/login")}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50"
-              >
-                Proceed to Sign In
-              </button>
+              <div className="pt-2">
+                <Link
+                  href={`/verify?email=${encodeURIComponent(formData.email.trim())}${redirectPath ? `&redirect=${encodeURIComponent(redirectPath)}` : ""}`}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
+                >
+                  Click here if not redirected automatically &rarr;
+                </Link>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -347,5 +340,19 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#07090e] flex items-center justify-center text-slate-400">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <RegisterContent />
+    </Suspense>
   );
 }

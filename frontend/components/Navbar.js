@@ -39,8 +39,8 @@ export default function Navbar() {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [userDropdownOpen]);
 
-  // If on login or register, do not show main navigation
-  if (pathname === "/login" || pathname === "/register") {
+  // If on login, register, or verify, do not show main navigation
+  if (pathname === "/login" || pathname === "/register" || pathname === "/verify") {
     return null;
   }
 

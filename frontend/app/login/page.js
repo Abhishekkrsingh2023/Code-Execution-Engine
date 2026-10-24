@@ -207,21 +207,39 @@ function LoginContent() {
 
           {/* Feedback Alerts */}
           {error && (
-            <div className="mb-5 p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs sm:text-sm flex items-start space-x-2.5">
-              <svg
-                className="w-4 h-4 text-rose-400 shrink-0 mt-0.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span>{error}</span>
+            <div className="mb-5 p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs sm:text-sm flex flex-col space-y-2">
+              <div className="flex items-start space-x-2.5">
+                <svg
+                  className="w-4 h-4 text-rose-400 shrink-0 mt-0.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>{error}</span>
+              </div>
+              {(error.toLowerCase().includes("not verified") ||
+                error.toLowerCase().includes("verify your email")) && (
+                <div className="pt-2 border-t border-rose-800/40 flex items-center justify-between">
+                  <span className="text-xs text-rose-200">Pending verification?</span>
+                  <Link
+                    href={`/verify?email=${encodeURIComponent(
+                      formData.username_or_email.includes("@")
+                        ? formData.username_or_email.trim()
+                        : ""
+                    )}`}
+                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors inline-flex items-center gap-1"
+                  >
+                    Verify email now &rarr;
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

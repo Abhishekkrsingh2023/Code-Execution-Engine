@@ -213,6 +213,56 @@ class TestUserRegister:
 
         assert response.status_code == 422
 
+    async def test_register_then_verify_otp_flow(
+        self,
+        async_client: AsyncClient,
+        db_session: AsyncSession,
+    ) -> None:
+        """Arrange: Valid registration payload.
+        Act 1: POST /api-v1/users/register.
+        Assert 1: 201 Created with is_email_verified=False and OTP in DB.
+        Act 2: POST /api-v1/users/otp/verify with issued OTP.
+        Assert 2: 200 OK, is_email_verified=True, cookies set.
+        Act 3: POST /api-v1/users/login with original password succeeds with 200 OK.
+        """
+        reg_payload = {
+            "username": "verified_flow_user",
+            "email": "verified_flow@example.com",
+            "password": "SecurePassword123!",
+        }
+
+        # 1. Register
+        reg_resp = await async_client.post("/api-v1/users/register", json=reg_payload)
+        assert reg_resp.status_code == 201
+        user_data = reg_resp.json()
+        assert user_data["is_email_verified"] is False
+
+        # Retrieve issued OTP from database
+        user_id = uuid.UUID(user_data["id"])
+        db_user = (await db_session.execute(select(User).where(User.id == user_id))).scalar_one()
+        assert db_user.otp is not None
+        otp_code = db_user.otp
+
+        # 2. Verify OTP
+        verify_payload = {
+            "email": "verified_flow@example.com",
+            "otp": otp_code,
+        }
+        verify_resp = await async_client.post("/api-v1/users/otp/verify", json=verify_payload)
+        assert verify_resp.status_code == 200
+        verify_data = verify_resp.json()
+        assert verify_data["user"]["is_email_verified"] is True
+        assert verify_data["auth_method"] == "otp"
+
+        # 3. Subsequent password login succeeds without 403 Forbidden
+        login_payload = {
+            "username_or_email": "verified_flow_user",
+            "password": "SecurePassword123!",
+        }
+        login_resp = await async_client.post("/api-v1/users/login", json=login_payload)
+        assert login_resp.status_code == 200
+        assert login_resp.json()["user"]["is_email_verified"] is True
+
 
 class TestUserLogin:
     """Test suite for POST /api-v1/users/login."""
