@@ -9,9 +9,8 @@ import Code0Loader from "@/components/Code0Loader";
 const SUPPORTED_LANGUAGES = [
   { name: "Python", icon: "/languages/python.png" },
   { name: "C", icon: "/languages/c.png" },
-  { name: "C++", icon: "/languages/c-.png" },
+  { name: "C++", icon: "/languages/cpp.png" },
   { name: "Java", icon: "/languages/java.png" },
-  { name: "JavaScript", icon: "/languages/java-script.png" },
 ];
 
 function LanguageCard({ name, icon, isMore = false }) {

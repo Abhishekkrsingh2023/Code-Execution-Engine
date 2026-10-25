@@ -66,7 +66,7 @@ const PLATFORM_HIGHLIGHTS = [
   },
   {
     title: "Multi-Language Ecosystem",
-    description: "Native support for Python, C, C++, Java, and JavaScript with custom test case evaluation and memory profiling.",
+    description: "Native support for Python, C, C++, and Java with custom test case evaluation and memory profiling.",
     icon: (
       <svg className="w-6 h-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />

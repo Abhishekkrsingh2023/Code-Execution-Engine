@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
+import AccessDenied from "./AccessDenied";
+import Code0Loader from "./Code0Loader";
 
 function isPublicRoute(pathname) {
   if (!pathname) return true;
@@ -32,7 +34,10 @@ export default function AuthGuard({ children }) {
 
     const path = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
     const isPublic = isPublicRoute(path);
-    const isAuthPage = path === "/login" || path === "/register" || (path === "/verify" && user?.is_email_verified);
+    const isAuthPage =
+      path === "/login" ||
+      path === "/register" ||
+      (path === "/verify" && user?.is_email_verified);
 
     // If not authenticated and visiting a protected route -> redirect to /login
     if (!user && !isPublic) {
@@ -45,32 +50,48 @@ export default function AuthGuard({ children }) {
       router.replace("/");
       return;
     }
-
-    // If visiting /admin and not an admin or moderator -> redirect to home
-    if (path.startsWith("/admin")) {
-      const isAllowed = user?.role === "admin" || user?.role === "moderator";
-      if (!isAllowed) {
-        router.replace("/");
-        return;
-      }
-    }
   }, [user, loading, pathname, router]);
 
-  const cleanPath = pathname ? (pathname === "/" ? "/" : pathname.replace(/\/+$/, "")) : "/";
+  const cleanPath = pathname
+    ? pathname === "/"
+      ? "/"
+      : pathname.replace(/\/+$/, "")
+    : "/";
   const isPublic = isPublicRoute(cleanPath);
-  const isUnauthorized = !loading && !user && !isPublic;
-  const isForbiddenAdmin =
-    !loading &&
-    cleanPath.startsWith("/admin") &&
-    user?.role !== "admin" &&
-    user?.role !== "moderator";
 
-  if (isUnauthorized || isForbiddenAdmin) {
+  // Still verifying session from storage or backend
+  if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center min-h-[60vh] text-slate-500 text-xs">
-        Redirecting...
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <Code0Loader fullscreen={false} text="Authenticating session..." />
       </div>
     );
+  }
+
+  // Not authenticated and trying to access a protected route
+  if (!user && !isPublic) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <Code0Loader fullscreen={false} text="Redirecting to login..." />
+      </div>
+    );
+  }
+
+  // Role-Based Access Control checks for authenticated users
+  if (user) {
+    // Admin routes: ONLY users with role "admin"
+    if (cleanPath.startsWith("/admin")) {
+      if (user.role !== "admin") {
+        return <AccessDenied requiredRole="admin" />;
+      }
+    }
+
+    // Moderator routes: Users with role "moderator" or "admin"
+    if (cleanPath.startsWith("/moderator")) {
+      if (user.role !== "moderator" && user.role !== "admin") {
+        return <AccessDenied requiredRole="moderator" />;
+      }
+    }
   }
 
   return <>{children}</>;

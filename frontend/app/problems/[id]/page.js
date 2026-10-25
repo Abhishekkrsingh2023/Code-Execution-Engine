@@ -8,10 +8,8 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { useAuth } from "@/lib/AuthContext";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
-import "highlight.js/styles/github-dark.css";
+import ConfirmModal from "@/components/ConfirmModal";
+import ProblemMarkdown from "@/components/ProblemMarkdown";
 
 // Dynamically import Monaco Editor with SSR disabled
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -33,13 +31,6 @@ const SUPPORTED_LANGS = [
     monacoLang: "python",
   },
   {
-    id: "java",
-    name: "Java",
-    icon: "/languages/java.png",
-    version: "OpenJDK 21",
-    monacoLang: "java",
-  },
-  {
     id: "cpp",
     name: "C++",
     icon: "/languages/cpp.png",
@@ -47,11 +38,11 @@ const SUPPORTED_LANGS = [
     monacoLang: "cpp",
   },
   {
-    id: "javascript",
-    name: "JavaScript",
-    icon: "/languages/java-script.png",
-    version: "Node 20",
-    monacoLang: "javascript",
+    id: "java",
+    name: "Java",
+    icon: "/languages/java.png",
+    version: "OpenJDK 21",
+    monacoLang: "java",
   },
   {
     id: "c",
@@ -64,9 +55,8 @@ const SUPPORTED_LANGS = [
 
 const DEFAULT_TEMPLATES = {
   python: `def solve():\n    # Read input from standard input\n    # Write your solution here\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
-  java: `import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        // Write your solution here\n    }\n}\n`,
   cpp: `#include <iostream>\n#include <vector>\n#include <string>\n\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(NULL);\n    // Write your solution here\n    return 0;\n}\n`,
-  javascript: `const fs = require('fs');\n\nfunction solve() {\n    const input = fs.readFileSync('/dev/stdin', 'utf-8');\n    // Write your solution here\n}\n\nsolve();\n`,
+  java: `import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        // Write your solution here\n    }\n}\n`,
   c: `#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    // Write your solution here\n    return 0;\n}\n`,
 };
 
@@ -119,6 +109,7 @@ export default function ProblemDetailPage() {
   const [newCaseExpected, setNewCaseExpected] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginModalAction, setLoginModalAction] = useState("run"); // "run" | "submit"
+  const [showResetModal, setShowResetModal] = useState(false);
 
   // Execution state
   const [executing, setExecuting] = useState(false);
@@ -285,13 +276,14 @@ export default function ProblemDetailPage() {
 
   // Reset editor to starter template
   const handleResetCode = () => {
-    if (
-      code.trim() &&
-      code !== DEFAULT_TEMPLATES[language] &&
-      !confirm("Reset current code to starter boilerplate?")
-    ) {
+    if (code.trim() && code !== DEFAULT_TEMPLATES[language]) {
+      setShowResetModal(true);
       return;
     }
+    performResetCode();
+  };
+
+  const performResetCode = () => {
     setCode(getBoilerplateCode(language, problemData?.templates));
   };
 
@@ -678,14 +670,7 @@ export default function ProblemDetailPage() {
             </div>
 
             {/* Problem Description Body */}
-            <div className="markdown-content text-xs sm:text-[13px] text-slate-300 leading-relaxed font-normal">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight]}
-              >
-                {prob.description || ""}
-              </ReactMarkdown>
-            </div>
+            <ProblemMarkdown content={prob.description || ""} />
 
             {/* Fallback Examples Section (only shown if not provided in markdown description) */}
             {!prob.description?.toLowerCase().includes("example") && (
@@ -809,40 +794,42 @@ export default function ProblemDetailPage() {
                   );
                 })}
 
-                {/* Language Dropdown for Additional Languages (C, etc.) */}
-                <div className="relative">
-                  <button
-                    onClick={() => setLangDropdownOpen(!langDropdownOpen)}
-                    className="px-2 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-colors flex items-center gap-1"
-                    title="More languages"
-                  >
-                    <span>▼</span>
-                  </button>
+                {/* Language Dropdown for Additional Languages if any */}
+                {SUPPORTED_LANGS.length > 4 && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setLangDropdownOpen(!langDropdownOpen)}
+                      className="px-2 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.04] transition-colors flex items-center gap-1"
+                      title="More languages"
+                    >
+                      <span>▼</span>
+                    </button>
 
-                  {langDropdownOpen && (
-                    <div className="absolute left-0 mt-1.5 w-44 bg-[#0e1322] border border-white/10 rounded-xl shadow-2xl py-1 z-50 backdrop-blur-xl">
-                      {SUPPORTED_LANGS.map((lang) => (
-                        <button
-                          key={lang.id}
-                          onClick={() => handleLanguageChange(lang.id)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors ${language === lang.id
-                            ? "bg-indigo-600/20 text-indigo-300 font-semibold"
-                            : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
-                            }`}
-                        >
-                          <Image
-                            src={lang.icon}
-                            alt={lang.name}
-                            width={14}
-                            height={14}
-                            className="w-3.5 h-3.5 object-contain"
-                          />
-                          <span>{lang.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                    {langDropdownOpen && (
+                      <div className="absolute left-0 mt-1.5 w-44 bg-[#0e1322] border border-white/10 rounded-xl shadow-2xl py-1 z-50 backdrop-blur-xl">
+                        {SUPPORTED_LANGS.map((lang) => (
+                          <button
+                            key={lang.id}
+                            onClick={() => handleLanguageChange(lang.id)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors ${language === lang.id
+                              ? "bg-indigo-600/20 text-indigo-300 font-semibold"
+                              : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
+                              }`}
+                          >
+                            <Image
+                              src={lang.icon}
+                              alt={lang.name}
+                              width={14}
+                              height={14}
+                              className="w-3.5 h-3.5 object-contain"
+                            />
+                            <span>{lang.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Right: Reset, Run & Submit Action Buttons */}
@@ -1499,6 +1486,17 @@ export default function ProblemDetailPage() {
           </div>
         </div>
       )}
+      {/* Reset Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showResetModal}
+        title="Reset Code to Default?"
+        message="Are you sure you want to reset your editor to the initial boilerplate? Any custom code or modifications you have written will be discarded."
+        confirmText="Reset Code"
+        cancelText="Cancel"
+        type="warning"
+        onConfirm={performResetCode}
+        onClose={() => setShowResetModal(false)}
+      />
     </div>
   );
 }
