@@ -1,7 +1,7 @@
 """Tests for code execution submission and polling routes.
 
 This module validates:
-- POST /api-v1/code/submit-code:
+- POST /api-v1/code/submit:
     - Successful submission enqueueing across supported languages (python, cpp, java, c)
     - Redis hash metadata persistence and queue job insertion
     - Disk artifact generation under backend/code/{submission_id}
@@ -38,7 +38,7 @@ def auth_headers(user: User) -> dict[str, str]:
 
 
 class TestCodeSubmitRoute:
-    """Test suite for POST /api-v1/code/submit-code."""
+    """Test suite for POST /api-v1/code/submit."""
 
     async def test_submit_code_python_success(
         self,
@@ -47,7 +47,7 @@ class TestCodeSubmitRoute:
         normal_user: User,
     ) -> None:
         """Arrange: Valid Python submission with test cases.
-        Act: POST to /api-v1/code/submit-code.
+        Act: POST to /api-v1/code/submit.
         Assert:
         - 200 OK with queued status, submission ID, streaming & polling URLs.
         - Redis hash 'submission:{id}' contains expected fields and status 'queued'.
@@ -67,7 +67,7 @@ class TestCodeSubmitRoute:
         }
 
         response = await async_client.post(
-            "/api-v1/code/submit-code",
+            "/api-v1/code/submit",
             json=payload,
             headers=auth_headers(normal_user),
         )
@@ -113,7 +113,7 @@ class TestCodeSubmitRoute:
         normal_user: User,
     ) -> None:
         """Arrange: Valid submission for each supported compiled language.
-        Act: POST to /api-v1/code/submit-code.
+        Act: POST to /api-v1/code/submit.
         Assert: Code file is saved on disk with the matching extension (Main.cpp, Main.java, Main.c).
         """
         payload = {
@@ -126,7 +126,7 @@ class TestCodeSubmitRoute:
         }
 
         response = await async_client.post(
-            "/api-v1/code/submit-code",
+            "/api-v1/code/submit",
             json=payload,
             headers=auth_headers(normal_user),
         )
@@ -142,7 +142,7 @@ class TestCodeSubmitRoute:
         normal_user: User,
     ) -> None:
         """Arrange: Payload specifying an unsupported language ('ruby').
-        Act: POST to /api-v1/code/submit-code.
+        Act: POST to /api-v1/code/submit.
         Assert: 422 Unprocessable Entity due to Language Enum validation.
         """
         payload = {
@@ -154,7 +154,7 @@ class TestCodeSubmitRoute:
         }
 
         response = await async_client.post(
-            "/api-v1/code/submit-code",
+            "/api-v1/code/submit",
             json=payload,
             headers=auth_headers(normal_user),
         )
@@ -167,7 +167,7 @@ class TestCodeSubmitRoute:
         normal_user: User,
     ) -> None:
         """Arrange: Payload with empty user_code string.
-        Act: POST to /api-v1/code/submit-code.
+        Act: POST to /api-v1/code/submit.
         Assert: 422 Unprocessable Entity (min_length=1 constraint).
         """
         payload = {
@@ -179,7 +179,7 @@ class TestCodeSubmitRoute:
         }
 
         response = await async_client.post(
-            "/api-v1/code/submit-code",
+            "/api-v1/code/submit",
             json=payload,
             headers=auth_headers(normal_user),
         )
@@ -192,7 +192,7 @@ class TestCodeSubmitRoute:
         normal_user: User,
     ) -> None:
         """Arrange: Payload with unknown problem and empty test_cases.
-        Act: POST to /api-v1/code/submit-code.
+        Act: POST to /api-v1/code/submit.
         Assert: 404 Not Found since submit loads internal test cases.
         """
         payload = {
@@ -204,7 +204,7 @@ class TestCodeSubmitRoute:
         }
 
         response = await async_client.post(
-            "/api-v1/code/submit-code",
+            "/api-v1/code/submit",
             json=payload,
             headers=auth_headers(normal_user),
         )
@@ -218,7 +218,7 @@ class TestCodeSubmitRoute:
         normal_user: User,
     ) -> None:
         """Arrange: Payload with forbidden unexpected field ('extra_field').
-        Act: POST to /api-v1/code/submit-code.
+        Act: POST to /api-v1/code/submit.
         Assert: 422 Unprocessable Entity (extra='forbid' constraint).
         """
         payload = {
@@ -231,7 +231,7 @@ class TestCodeSubmitRoute:
         }
 
         response = await async_client.post(
-            "/api-v1/code/submit-code",
+            "/api-v1/code/submit",
             json=payload,
             headers=auth_headers(normal_user),
         )
@@ -244,7 +244,7 @@ class TestCodeSubmitRoute:
         normal_user: User,
     ) -> None:
         """Arrange: Simulate Redis pipeline failure during submission enqueueing.
-        Act: POST to /api-v1/code/submit-code.
+        Act: POST to /api-v1/code/submit.
         Assert:
         - 500 Internal Server Error returned.
         - Directory created for the submission is removed from disk.
@@ -268,7 +268,7 @@ class TestCodeSubmitRoute:
             mock_pipeline.return_value = mock_pipe
 
             response = await async_client.post(
-                "/api-v1/code/submit-code",
+                "/api-v1/code/submit",
                 json=payload,
                 headers=auth_headers(normal_user),
             )

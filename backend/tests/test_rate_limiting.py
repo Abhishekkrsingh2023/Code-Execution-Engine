@@ -9,7 +9,7 @@ This module validates:
     - Enforces rate limiting on authentication OTP generation requests.
 - POST /api-v1/users/login (limit: 10/minute):
     - Enforces rate limiting on password login attempts.
-- POST /api-v1/code/run (limit: 10/minute):
+- POST /api-v1/code/run (limit: 4/minute):
     - Enforces rate limiting on code execution requests.
 - Limiter disable/enable toggling:
     - Bypasses throttling when limiter.enabled is False.
@@ -128,10 +128,10 @@ class TestRateLimiting:
         normal_user: User,
     ) -> None:
         """Arrange: Authenticated code run payload with mocked execution handler.
-        Act: Send 10 code run requests, then an 11th request.
+        Act: Send 4 code run requests, then a 5th request.
         Assert:
-        - First 10 requests reach the execution handler and return 200 OK.
-        - 11th request is throttled by SlowAPI and returns 429 Too Many Requests.
+        - First 4 requests reach the execution handler and return 200 OK.
+        - 5th request is throttled by SlowAPI and returns 429 Too Many Requests.
         """
         payload = {
             "problem_id": 1,
@@ -144,7 +144,7 @@ class TestRateLimiting:
         with patch(
             "app.routers.code_routes.handle_run_code_request", return_value={"status": "queued"}
         ):
-            for _ in range(10):
+            for _ in range(4):
                 resp = await async_client.post("/api-v1/code/run", json=payload, headers=headers)
                 assert resp.status_code == 200
 

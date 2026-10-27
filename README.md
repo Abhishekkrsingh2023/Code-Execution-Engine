@@ -414,7 +414,7 @@ python run_all.py
 
 ## 📡 API Reference
 
-### 1. Run Code (`POST /api-v1/code/run` or `/run-code`)
+### 1. Run Code (`POST /api-v1/code/run`)
 
 Runs code against custom test cases or sample test cases for immediate feedback. **Does not update user marks or leaderboard.**
 
@@ -453,7 +453,7 @@ Runs code against custom test cases or sample test cases for immediate feedback.
 
 ---
 
-### 2. Submit Code (`POST /api-v1/code/submit` or `/submit-code`)
+### 2. Submit Code (`POST /api-v1/code/submit`)
 
 Submits code for official evaluation against **internal test cases loaded from the database**. Evaluates results, **updates user marks & leaderboard stats**, and returns verdicts **without exposing internal test cases**.
 

@@ -44,8 +44,8 @@ tests/
   - Failure reporting when Redis returns `False`.
   - Exception handling when Redis connection fails.
 
-### `test_code_routes.py` (13 tests)
-- `POST /api-v1/code/submit-code`:
+### `test_code_routes.py` (20 tests)
+- `POST /api-v1/code/submit`:
   - Python submission with test cases: validates response, Redis hash creation, queue insertion, and file creation on disk.
   - Multi-language support: verifies file extension routing for `cpp` (`Main.cpp`), `c` (`Main.c`), and `java` (`Main.java`).
   - Request validation: rejects unsupported languages, empty code strings, empty test cases, and unexpected/forbidden fields with `422`.

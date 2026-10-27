@@ -376,7 +376,7 @@ class TestLeaderboardRoutes:
 
         # 1. Submit code with auth
         res = await async_client.post(
-            "/api-v1/code/submit-code",
+            "/api-v1/code/submit",
             json=payload,
             headers={"Authorization": f"Bearer {token}"},
         )
