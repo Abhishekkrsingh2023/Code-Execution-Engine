@@ -18,8 +18,8 @@ def get_uuid() -> str:
 class TestCase(BaseModel):
     __test__ = False
     id: int | None = Field(default=None, description="Optional integer test case identifier.")
-    input: str = Field(..., description="Input provided to the user's program.")
-    expected_output: str = Field(..., description="Expected output for the given input.")
+    input: str = Field(description="Input provided to the user's program.")
+    expected_output: str = Field(description="Expected output for the given input.")
     weight: float = Field(
         default=1.0, ge=0.0, description="Weight/score assigned to this test case."
     )
@@ -46,7 +46,6 @@ class SubmissionRequest(BaseModel):
     """
 
     problem_id: int = Field(
-        ...,
         ge=1,
         description="Unique integer identifier of the programming problem matching problems table.",
     )
@@ -56,8 +55,8 @@ class SubmissionRequest(BaseModel):
     problem_name: str | None = Field(
         default="Problem Submission", description="Name of the programming problem."
     )
-    user_code: str = Field(..., min_length=1, description="Source code submitted by the user.")
-    language: Language = Field(..., description="Programming language of the submission.")
+    user_code: str = Field(min_length=1, description="Source code submitted by the user.")
+    language: Language = Field(description="Programming language of the submission.")
     mode: ExecutionMode = Field(
         default=ExecutionMode.submit,
         description="Execution mode: 'run' (test run without updating marks) or 'submit' (evaluates against internal test cases, updates marks).",

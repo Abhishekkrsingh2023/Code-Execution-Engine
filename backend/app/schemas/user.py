@@ -25,7 +25,7 @@ class UserRegisterRequest(BaseModel):
         examples=["Alice Smith"],
     )
     username: str = Field(
-        ...,
+
         min_length=3,
         max_length=50,
         pattern=r"^[a-zA-Z0-9_-]+$",
@@ -33,7 +33,6 @@ class UserRegisterRequest(BaseModel):
         examples=["alice_dev"],
     )
     email: EmailStr = Field(
-        ...,
         description="Unique user email address.",
         examples=["alice@example.com"],
     )
@@ -61,14 +60,13 @@ class UserLoginRequest(BaseModel):
     """
 
     username_or_email: str = Field(
-        ...,
         min_length=3,
         max_length=255,
         description="Registered username or email address.",
         examples=["alice@example.com"],
     )
     password: str = Field(
-        ...,
+
         min_length=1,
         max_length=128,
         description="Account password.",
@@ -90,7 +88,6 @@ class RequestOTPRequest(BaseModel):
     """
 
     email: EmailStr = Field(
-        ...,
         description="User email address for passwordless OTP login.",
         examples=["alice@example.com"],
     )
@@ -111,12 +108,10 @@ class VerifyOTPRequest(BaseModel):
     """
 
     email: EmailStr = Field(
-        ...,
         description="User email address.",
         examples=["alice@example.com"],
     )
     otp: str = Field(
-        ...,
         min_length=6,
         max_length=6,
         pattern=r"^\d{6}$",
@@ -193,11 +188,11 @@ class UserResponse(BaseModel):
         created_at (datetime): Account creation timestamp in UTC.
     """
 
-    id: uuid.UUID = Field(..., description="Unique UUID identifier of the user.")
+    id: uuid.UUID = Field( description="Unique UUID identifier of the user.")
     name: str | None = Field(default=None, description="User's full name or display name.")
-    username: str = Field(..., description="User handle.")
-    email: EmailStr = Field(..., description="User email address.")
-    role: UserRole = Field(..., description="Role assigned to user.")
+    username: str = Field( description="User handle.")
+    email: EmailStr = Field( description="User email address.")
+    role: UserRole = Field( description="Role assigned to user.")
     status: UserStatus = Field(default=UserStatus.ACTIVE, description="Account status.")
     is_email_verified: bool = Field(
         default=False, description="Indicates whether the user's email has been verified."
@@ -205,14 +200,14 @@ class UserResponse(BaseModel):
     is_protected: bool = Field(
         default=False, description="Indicates whether the account is a protected system account."
     )
-    has_password: bool = Field(..., description="Indicates whether the account has a password set.")
+    has_password: bool = Field( description="Indicates whether the account has a password set.")
     total_score: float = Field(
         default=0.0, description="Total score accumulated on the leaderboard."
     )
     problems_solved: int = Field(
         default=0, description="Total distinct problems successfully solved."
     )
-    created_at: datetime = Field(..., description="Account creation timestamp in UTC.")
+    created_at: datetime = Field( description="Account creation timestamp in UTC.")
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -231,10 +226,10 @@ class UserLoginResponse(BaseModel):
         auth_method (str): Authentication method utilized ('password' or 'otp').
     """
 
-    message: str = Field(..., description="Status message.")
-    user: UserResponse = Field(..., description="Profile details of the authenticated user.")
+    message: str = Field( description="Status message.")
+    user: UserResponse = Field( description="Profile details of the authenticated user.")
     auth_method: str = Field(
-        ..., description="Authentication method utilized ('password' or 'otp')."
+         description="Authentication method utilized ('password' or 'otp')."
     )
 
 
@@ -279,9 +274,9 @@ class OTPResponse(BaseModel):
         expires_in_seconds (int): Expiry duration in seconds.
     """
 
-    message: str = Field(..., description="Delivery status confirmation.")
-    email: EmailStr = Field(..., description="Target email address.")
-    expires_in_seconds: int = Field(..., description="Validity period in seconds.")
+    message: str = Field( description="Delivery status confirmation.")
+    email: EmailStr = Field( description="Target email address.")
+    expires_in_seconds: int = Field( description="Validity period in seconds.")
 
 
 class UserListResponse(BaseModel):
@@ -295,10 +290,10 @@ class UserListResponse(BaseModel):
         users (List[UserResponse]): User profiles list.
     """
 
-    total: int = Field(..., description="Total user records count.")
-    skip: int = Field(..., description="Pagination offset.")
-    limit: int = Field(..., description="Pagination limit.")
-    users: list[UserResponse] = Field(..., description="List of user profiles.")
+    total: int = Field( description="Total user records count.")
+    skip: int = Field( description="Pagination offset.")
+    limit: int = Field( description="Pagination limit.")
+    users: list[UserResponse] = Field( description="List of user profiles.")
 
 
 class MessageResponse(BaseModel):
@@ -309,7 +304,7 @@ class MessageResponse(BaseModel):
         message (str): Status or confirmation message.
     """
 
-    message: str = Field(..., description="Confirmation message.")
+    message: str = Field( description="Confirmation message.")
 
 
 class UsernameAvailabilityResponse(BaseModel):
@@ -322,9 +317,9 @@ class UsernameAvailabilityResponse(BaseModel):
         available (bool): Convenience alias for is_available.
     """
 
-    username: str = Field(..., description="Target username handle queried.")
+    username: str = Field( description="Target username handle queried.")
     is_available: bool = Field(
-        ...,
+
         description="True if the username is available for registration, False if already taken.",
     )
-    available: bool = Field(..., description="Convenience alias reflecting availability.")
+    available: bool = Field( description="Convenience alias reflecting availability.")

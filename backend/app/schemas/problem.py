@@ -10,14 +10,12 @@ class ProblemCreateRequest(BaseModel):
     """Schema for creating a programming problem."""
 
     title: str = Field(
-        ...,
         min_length=3,
         max_length=255,
         description="Title of the problem.",
         examples=["Two Sum"],
     )
     description: str = Field(
-        ...,
         min_length=5,
         description="Detailed problem statement and description.",
         examples=[
@@ -91,7 +89,6 @@ class ProblemStatusUpdateRequest(BaseModel):
     """Schema for updating problem publication status."""
 
     status: ProblemStatus = Field(
-        ...,
         description="New publication status (published, unpublished, draft, archived).",
     )
 
@@ -105,23 +102,23 @@ class ProblemStatusUpdateRequest(BaseModel):
 class ProblemResponse(BaseModel):
     """Public representation of a problem."""
 
-    id: int = Field(..., description="Unique problem identifier.")
+    id: int = Field( description="Unique problem identifier.")
     problem_code: int | None = Field(
         default=None, description="Integer problem identifier matching id."
     )
-    title: str = Field(..., description="Problem title.")
-    description: str = Field(..., description="Problem description.")
-    difficulty: ProblemDifficulty = Field(..., description="Problem difficulty.")
-    category: str = Field(..., description="Problem category.")
+    title: str = Field( description="Problem title.")
+    description: str = Field( description="Problem description.")
+    difficulty: ProblemDifficulty = Field( description="Problem difficulty.")
+    category: str = Field( description="Problem category.")
     topic: str = Field(
-        ..., description="Problem topic tag (e.g. array, tree, linkedlist, recursion)."
+         description="Problem topic tag (e.g. array, tree, linkedlist, recursion)."
     )
-    status: ProblemStatus = Field(..., description="Problem publication status.")
-    time_limit: float = Field(..., description="Time limit in seconds.")
-    memory_limit: int = Field(..., description="Memory limit in megabytes.")
+    status: ProblemStatus = Field( description="Problem publication status.")
+    time_limit: float = Field( description="Time limit in seconds.")
+    memory_limit: int = Field( description="Memory limit in megabytes.")
     created_by: uuid.UUID | None = Field(None, description="Creator user ID (moderator or admin).")
-    created_at: datetime = Field(..., description="Creation timestamp in UTC.")
-    updated_at: datetime = Field(..., description="Last update timestamp in UTC.")
+    created_at: datetime = Field( description="Creation timestamp in UTC.")
+    updated_at: datetime = Field( description="Last update timestamp in UTC.")
     is_deleted: bool = Field(default=False, description="Soft-deletion status.")
     deleted_at: datetime | None = Field(None, description="Deletion timestamp in UTC.")
 
@@ -134,17 +131,17 @@ class ProblemResponse(BaseModel):
 class ProblemListResponse(BaseModel):
     """Paginated problem listing response."""
 
-    total: int = Field(..., description="Total problem count.")
-    skip: int = Field(..., description="Offset.")
-    limit: int = Field(..., description="Page limit.")
-    problems: list[ProblemResponse] = Field(..., description="List of problems.")
+    total: int = Field( description="Total problem count.")
+    skip: int = Field( description="Offset.")
+    limit: int = Field( description="Page limit.")
+    problems: list[ProblemResponse] = Field( description="List of problems.")
 
 
 class TestCaseCreateItem(BaseModel):
     """Schema for individual test case item."""
 
-    input: str = Field(..., description="Standard input string.")
-    expected_output: str = Field(..., description="Expected output string.")
+    input: str = Field( description="Standard input string.")
+    expected_output: str = Field( description="Expected output string.")
     is_sample: bool = Field(
         default=False, description="Flag indicating if this is a sample/run test case."
     )
@@ -156,12 +153,12 @@ class TestCaseCreateItem(BaseModel):
 class TestCaseResponse(BaseModel):
     """Public representation of a test case."""
 
-    id: int = Field(..., description="Unique test case identifier.")
-    problem_id: int = Field(..., description="Associated problem ID.")
-    input: str = Field(..., description="Standard input.")
-    expected_output: str = Field(..., description="Expected output.")
-    is_sample: bool = Field(..., description="Whether this is a sample test case.")
-    weight: float = Field(..., description="Score weight.")
+    id: int = Field( description="Unique test case identifier.")
+    problem_id: int = Field( description="Associated problem ID.")
+    input: str = Field( description="Standard input.")
+    expected_output: str = Field( description="Expected output.")
+    is_sample: bool = Field( description="Whether this is a sample test case.")
+    weight: float = Field( description="Score weight.")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -170,7 +167,7 @@ class ProblemTemplateItem(BaseModel):
     """Schema for a language problem template item."""
 
     language: str = Field(
-        ..., max_length=20, description="Programming language (e.g. python, cpp)."
+         max_length=20, description="Programming language (e.g. python, cpp)."
     )
     boilerplate_code: str | None = Field(
         default=None, description="Starter boilerplate code for user, if any."
@@ -182,11 +179,11 @@ class ProblemTemplateItem(BaseModel):
 class ProblemTemplateResponse(BaseModel):
     """Public representation of a problem template."""
 
-    problem_id: int = Field(..., description="Integer problem ID.")
-    language: str = Field(..., description="Programming language.")
+    problem_id: int = Field( description="Integer problem ID.")
+    language: str = Field( description="Programming language.")
     boilerplate_code: str | None = Field(default=None, description="Starter boilerplate code.")
-    created_at: datetime = Field(..., description="Creation timestamp in UTC.")
-    updated_at: datetime = Field(..., description="Last update timestamp in UTC.")
+    created_at: datetime = Field( description="Creation timestamp in UTC.")
+    updated_at: datetime = Field( description="Last update timestamp in UTC.")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -195,10 +192,10 @@ class CommonProblemTemplateCreateRequest(BaseModel):
     """Schema for creating or updating a common problem template."""
 
     problem_id: int = Field(
-        ..., ge=1, description="Integer problem identifier matching problems table."
+         ge=1, description="Integer problem identifier matching problems table."
     )
     problem_statement: str = Field(
-        ..., min_length=5, description="Problem statement text or markdown."
+         min_length=5, description="Problem statement text or markdown."
     )
     time_limit: float = Field(default=2.0, ge=0.1, le=30.0, description="Time limit in seconds.")
     run_test_cases: list[dict] = Field(
@@ -216,13 +213,13 @@ class CommonProblemTemplateCreateRequest(BaseModel):
 class CommonProblemTemplateResponse(BaseModel):
     """Public representation of a common problem template."""
 
-    problem_id: int = Field(..., description="Integer problem identifier.")
-    problem_statement: str = Field(..., description="Problem statement text.")
-    time_limit: float = Field(..., description="Execution time limit in seconds.")
-    run_test_cases: list[dict] = Field(..., description="Run test cases.")
-    submit_test_cases: list[dict] = Field(..., description="Submit test cases.")
-    created_at: datetime = Field(..., description="Creation timestamp in UTC.")
-    updated_at: datetime = Field(..., description="Last update timestamp in UTC.")
+    problem_id: int = Field( description="Integer problem identifier.")
+    problem_statement: str = Field( description="Problem statement text.")
+    time_limit: float = Field( description="Execution time limit in seconds.")
+    run_test_cases: list[dict] = Field( description="Run test cases.")
+    submit_test_cases: list[dict] = Field( description="Submit test cases.")
+    created_at: datetime = Field( description="Creation timestamp in UTC.")
+    updated_at: datetime = Field( description="Last update timestamp in UTC.")
     templates: list[ProblemTemplateResponse] = Field(
         default_factory=list, description="Associated language problem templates."
     )
@@ -234,8 +231,8 @@ class FullProblemCreateRequest(BaseModel):
     """Unified schema for creating problem, common problem template, language templates, and test cases."""
 
     # Problem fields
-    title: str = Field(..., min_length=3, max_length=255, description="Problem title.")
-    description: str = Field(..., min_length=5, description="Detailed problem statement.")
+    title: str = Field( min_length=3, max_length=255, description="Problem title.")
+    description: str = Field( min_length=5, description="Detailed problem statement.")
     difficulty: ProblemDifficulty = Field(
         default=ProblemDifficulty.EASY, description="Difficulty level."
     )
@@ -278,8 +275,8 @@ class FullProblemCreateRequest(BaseModel):
 class FullProblemResponse(BaseModel):
     """Detailed response containing problem, test cases, and templates."""
 
-    problem: ProblemResponse = Field(..., description="Problem core details.")
-    problem_code: int = Field(..., description="Integer problem ID in template system.")
+    problem: ProblemResponse = Field( description="Problem core details.")
+    problem_code: int = Field( description="Integer problem ID in template system.")
     problem_id: int | None = Field(None, description="Integer problem ID in template system.")
     run_test_cases: list[dict] = Field(default_factory=list, description="Run test cases.")
     templates: list[ProblemTemplateResponse] = Field(

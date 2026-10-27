@@ -15,16 +15,16 @@ from app.schemas.problem import ProblemResponse
 class AdminUserResponse(BaseModel):
     """User profile response for administrators with activity metrics."""
 
-    id: uuid.UUID = Field(..., description="User unique identifier.")
+    id: uuid.UUID = Field(description="User unique identifier.")
     name: str | None = Field(default=None, description="User's full name.")
-    username: str = Field(..., description="User handle.")
-    email: EmailStr = Field(..., description="User email address.")
-    role: UserRole = Field(..., description="Role (user, moderator, admin).")
-    status: UserStatus = Field(..., description="Account status (active, inactive, suspended).")
-    is_email_verified: bool = Field(..., description="Whether email has been verified.")
-    is_protected: bool = Field(..., description="Whether account is a protected system account.")
-    has_password: bool = Field(..., description="Whether account has a password set.")
-    created_at: datetime = Field(..., description="Registration timestamp.")
+    username: str = Field(description="User handle.")
+    email: EmailStr = Field(description="User email address.")
+    role: UserRole = Field(description="Role (user, moderator, admin).")
+    status: UserStatus = Field(description="Account status (active, inactive, suspended).")
+    is_email_verified: bool = Field(description="Whether email has been verified.")
+    is_protected: bool = Field(description="Whether account is a protected system account.")
+    has_password: bool = Field(description="Whether account has a password set.")
+    created_at: datetime = Field(description="Registration timestamp.")
     total_score: float = Field(
         default=0.0, description="Total score accumulated on the leaderboard."
     )
@@ -54,10 +54,10 @@ class AdminUserDetailResponse(AdminUserResponse):
 class AdminUserListResponse(BaseModel):
     """Paginated user list for admin management."""
 
-    total: int = Field(..., description="Total users matching criteria.")
-    skip: int = Field(..., description="Pagination offset.")
-    limit: int = Field(..., description="Pagination limit.")
-    users: list[AdminUserResponse] = Field(..., description="List of user profiles.")
+    total: int = Field(description="Total users matching criteria.")
+    skip: int = Field(description="Pagination offset.")
+    limit: int = Field(description="Pagination limit.")
+    users: list[AdminUserResponse] = Field(description="List of user profiles.")
 
 
 class AdminUpdateUserRoleRequest(BaseModel):
@@ -119,20 +119,20 @@ class AdminUpdateUserRequest(BaseModel):
 class AuditLogResponse(BaseModel):
     """Audit log entry response."""
 
-    id: uuid.UUID = Field(..., description="Audit record ID.")
+    id: uuid.UUID = Field(description="Audit record ID.")
     actor_id: uuid.UUID | None = Field(None, description="ID of user who performed the action.")
     actor_username: str | None = Field(None, description="Username of actor.")
     actor_role: str | None = Field(None, description="Role of actor at action time.")
-    action: str = Field(..., description="Action identifier.")
+    action: str = Field(description="Action identifier.")
     target_type: str | None = Field(
         None, description="Type of target resource (e.g. user, problem)."
     )
     target_id: str | None = Field(None, description="ID of target resource.")
-    status: str = Field(..., description="Execution outcome (success, failure, error).")
+    status: str = Field(description="Execution outcome (success, failure, error).")
     details: dict[str, Any] | None = Field(None, description="Sanitized metadata about the change.")
     error_message: str | None = Field(None, description="Error message if failed.")
     ip_address: str | None = Field(None, description="Client IP address.")
-    created_at: datetime = Field(..., description="Timestamp of action.")
+    created_at: datetime = Field(description="Timestamp of action.")
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -143,10 +143,10 @@ class AuditLogResponse(BaseModel):
 class AuditLogListResponse(BaseModel):
     """Paginated list of audit logs."""
 
-    total: int = Field(..., description="Total audit records.")
-    skip: int = Field(..., description="Offset.")
-    limit: int = Field(..., description="Limit.")
-    logs: list[AuditLogResponse] = Field(..., description="Audit records.")
+    total: int = Field(description="Total audit records.")
+    skip: int = Field(description="Offset.")
+    limit: int = Field(description="Limit.")
+    logs: list[AuditLogResponse] = Field(description="Audit records.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,30 +157,30 @@ class AuditLogListResponse(BaseModel):
 class TimeSeriesPoint(BaseModel):
     """Single point for time series graphs."""
 
-    date: str = Field(..., description="Date string (YYYY-MM-DD).")
-    count: int = Field(..., description="Occurrence count.")
+    date: str = Field(description="Date string (YYYY-MM-DD).")
+    count: int = Field(description="Occurrence count.")
 
 
 class ModeratorProblemCount(BaseModel):
     """Count of problems created by a moderator."""
 
-    moderator_id: str = Field(..., description="Moderator user ID.")
-    username: str = Field(..., description="Moderator username.")
-    count: int = Field(..., description="Total problems authored.")
+    moderator_id: str = Field(description="Moderator user ID.")
+    username: str = Field(description="Moderator username.")
+    count: int = Field(description="Total problems authored.")
 
 
 class UserStatsResponse(BaseModel):
     """Aggregate statistics for users."""
 
-    total_users: int = Field(..., description="Total registered users.")
+    total_users: int = Field(description="Total registered users.")
     by_role: dict[str, int] = Field(
-        ..., description="Count of users grouped by role (user, moderator, admin)."
+        description="Count of users grouped by role (user, moderator, admin)."
     )
     by_status: dict[str, int] = Field(
-        ..., description="Count of users grouped by status (active, inactive, suspended)."
+        description="Count of users grouped by status (active, inactive, suspended)."
     )
     new_registrations_in_period: int = Field(
-        ..., description="New registrations within the requested time period."
+        description="New registrations within the requested time period."
     )
     registrations_trend: list[TimeSeriesPoint] = Field(
         default_factory=list, description="Daily registrations trend."
@@ -190,17 +190,17 @@ class UserStatsResponse(BaseModel):
 class ProblemStatsResponse(BaseModel):
     """Aggregate statistics for programming problems."""
 
-    total_problems: int = Field(..., description="Total active (non-deleted) problems.")
-    total_including_deleted: int = Field(..., description="Total problems including soft-deleted.")
+    total_problems: int = Field(description="Total active (non-deleted) problems.")
+    total_including_deleted: int = Field(description="Total problems including soft-deleted.")
     by_difficulty: dict[str, int] = Field(
-        ..., description="Problems grouped by difficulty (easy, medium, hard)."
+        description="Problems grouped by difficulty (easy, medium, hard)."
     )
-    by_category: dict[str, int] = Field(..., description="Problems grouped by category.")
+    by_category: dict[str, int] = Field(description="Problems grouped by category.")
     by_topic: dict[str, int] = Field(
-        ..., description="Problems grouped by topic (array, tree, linkedlist, etc.)."
+        description="Problems grouped by topic (array, tree, linkedlist, etc.)."
     )
     by_status: dict[str, int] = Field(
-        ..., description="Problems grouped by status (published, unpublished, draft, archived)."
+        description="Problems grouped by status (published, unpublished, draft, archived)."
     )
     problems_by_moderator: list[ModeratorProblemCount] = Field(
         default_factory=list, description="Problems created by each moderator."
@@ -219,17 +219,17 @@ class ProblemStatsResponse(BaseModel):
 class SubmissionStatsResponse(BaseModel):
     """Aggregate statistics for code submissions and execution results."""
 
-    total_submissions: int = Field(..., description="Total submissions in system.")
-    accepted: int = Field(..., description="Count of accepted submissions.")
-    rejected: int = Field(..., description="Count of rejected/failed submissions.")
-    compilation_errors: int = Field(..., description="Count of compilation error submissions.")
-    runtime_errors: int = Field(..., description="Count of runtime error submissions.")
-    time_limit_exceeded: int = Field(..., description="Count of time limit exceeded submissions.")
+    total_submissions: int = Field(description="Total submissions in system.")
+    accepted: int = Field(description="Count of accepted submissions.")
+    rejected: int = Field(description="Count of rejected/failed submissions.")
+    compilation_errors: int = Field(description="Count of compilation error submissions.")
+    runtime_errors: int = Field(description="Count of runtime error submissions.")
+    time_limit_exceeded: int = Field(description="Count of time limit exceeded submissions.")
     memory_limit_exceeded: int = Field(
-        ..., description="Count of memory limit exceeded submissions."
+        description="Count of memory limit exceeded submissions."
     )
     success_rate: float = Field(
-        ..., description="Submission success rate percentage (0.0 to 100.0)."
+        description="Submission success rate percentage (0.0 to 100.0)."
     )
     submissions_trend: list[TimeSeriesPoint] = Field(
         default_factory=list, description="Daily submissions trend."
@@ -256,7 +256,7 @@ class SystemActivityStatsResponse(BaseModel):
 class DashboardStatsResponse(BaseModel):
     """Consolidated dashboard statistics overview."""
 
-    users: UserStatsResponse = Field(..., description="User metrics.")
-    problems: ProblemStatsResponse = Field(..., description="Problem metrics.")
-    submissions: SubmissionStatsResponse = Field(..., description="Submission metrics.")
-    activity: SystemActivityStatsResponse = Field(..., description="System activity metrics.")
+    users: UserStatsResponse = Field(description="User metrics.")
+    problems: ProblemStatsResponse = Field(description="Problem metrics.")
+    submissions: SubmissionStatsResponse = Field(description="Submission metrics.")
+    activity: SystemActivityStatsResponse = Field(description="System activity metrics.")
