@@ -22,8 +22,8 @@ class DockerContainerEngine:
         self,
         image_name: str,
         volume_mount: str = "shared",
-        memory_limit: str = "128m",
-        cpu_limit: str = "0.5",
+        memory_limit: str = "256m",
+        cpu_limit: str = "1.0",
         pids_limit: int = 50,
     ) -> None:
         """
@@ -32,8 +32,8 @@ class DockerContainerEngine:
             volume_mount: Host-side base directory for code (e.g. ``/opt/app/code``).
                           The specific submission subfolder is appended in
                           :meth:`start_container`, so only that folder is mounted.
-            memory_limit: Memory cap (e.g. ``"128m"``).
-            cpu_limit:    CPU cap (e.g. ``"0.5"``).
+            memory_limit: Memory cap (e.g. ``"256m"``).
+            cpu_limit:    CPU cap (e.g. ``"1.0"``).
             pids_limit:   Maximum number of processes/threads inside the container.
                           50 is enough for any normal program; prevents fork bombs.
         """
@@ -55,6 +55,11 @@ class DockerContainerEngine:
                 "-i",
                 self.container_id,
                 "javac",
+                "-J-XX:+TieredCompilation",
+                "-J-XX:TieredStopAtLevel=1",
+                "-J-XX:+UseSerialGC",
+                "-J-Xms16m",
+                "-J-Xmx128m",
                 f"/shared/{folder_name}/Main.java",
             ]
         elif language == "cpp":
@@ -91,6 +96,11 @@ class DockerContainerEngine:
                 "-i",
                 self.container_id,
                 "java",
+                "-XX:+TieredCompilation",
+                "-XX:TieredStopAtLevel=1",
+                "-XX:+UseSerialGC",
+                "-Xms16m",
+                "-Xmx128m",
                 "-cp",
                 f"/shared/{folder_name}",
                 "Main",

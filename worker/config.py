@@ -28,8 +28,8 @@ class WorkerSettings(BaseSettings):
     HOST_CODE_BASE_DIR: str | None = None
 
     # Sandbox Docker Container Limits & Images
-    CONTAINER_MEMORY_LIMIT: str = "128m"
-    CONTAINER_CPU_LIMIT: str = "0.5"
+    CONTAINER_MEMORY_LIMIT: str = "256m"
+    CONTAINER_CPU_LIMIT: str = "1.0"
     CONTAINER_PIDS_LIMIT: int = 50
 
     DOCKER_IMAGE_PYTHON: str = "python:3.12-alpine"

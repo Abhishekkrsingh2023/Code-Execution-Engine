@@ -262,3 +262,21 @@ def test_docker_container_engine_init():
     assert engine.memory_limit == "64m"
     assert engine.cpu_limit == "0.25"
     assert engine.pids_limit == 30
+
+
+def test_java_compilation_and_execution_command_flags():
+    engine = DockerContainerEngine(image_name="eclipse-temurin:22-jdk-alpine")
+    engine.container_id = "test-container-id"
+    compile_cmd = engine._get_command_to_compile("java", "sub-123")
+    assert "-J-XX:+TieredCompilation" in compile_cmd
+    assert "-J-XX:TieredStopAtLevel=1" in compile_cmd
+    assert "-J-XX:+UseSerialGC" in compile_cmd
+    assert "-J-Xms16m" in compile_cmd
+    assert "-J-Xmx128m" in compile_cmd
+
+    exec_cmd = engine._get_command_to_execute("java", "sub-123")
+    assert "-XX:+TieredCompilation" in exec_cmd
+    assert "-XX:TieredStopAtLevel=1" in exec_cmd
+    assert "-XX:+UseSerialGC" in exec_cmd
+    assert "-Xms16m" in exec_cmd
+    assert "-Xmx128m" in exec_cmd
