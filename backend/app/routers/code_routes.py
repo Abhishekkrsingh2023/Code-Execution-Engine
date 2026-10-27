@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api-v1/code", tags=["code"])
 
 @router.post("/run", summary="Run code against sample or custom test cases (does not update marks)")
 @router.post("/run-code", include_in_schema=False)
-@limiter.limit("10/minute")
+@limiter.limit("4/minute")
 async def run_code_request(
     request: Request,
     submission: RunRequest,
@@ -41,7 +41,7 @@ async def run_code_request(
     "/submit", summary="Submit code for evaluation against internal test cases (updates marks)"
 )
 @router.post("/submit-code")
-@limiter.limit("10/minute")
+@limiter.limit("4/minute")
 async def submit_code_request(
     request: Request,
     submission: SubmitRequest,
