@@ -44,10 +44,6 @@ export default function Navbar() {
     return null;
   }
 
-  const isAdmin = mounted && !loading && user?.role === "admin";
-  const isModerator = mounted && !loading && user?.role === "moderator";
-  const isCurator = isAdmin || isModerator;
-
   const navLinks = [
     { name: "Problems", href: "/problems" },
     { name: "Leaderboard", href: "/leaderboard" },
@@ -56,12 +52,6 @@ export default function Navbar() {
 
   if (mounted && !loading && user) {
     navLinks.push({ name: "Profile", href: "/profile" });
-  }
-
-  if (isAdmin) {
-    navLinks.push({ name: "Admin", href: "/admin" });
-  } else if (isModerator) {
-    navLinks.push({ name: "Moderator", href: "/moderator" });
   }
 
   // Check if current route is within a problem detail page to maximize width
@@ -73,8 +63,6 @@ export default function Navbar() {
     if (href === "/leaderboard") return pathname.startsWith("/leaderboard");
     if (href === "/about") return pathname === "/about" || pathname === "/abouts";
     if (href === "/profile") return pathname.startsWith("/profile");
-    if (href === "/admin") return pathname.startsWith("/admin");
-    if (href === "/moderator") return pathname.startsWith("/moderator");
     return pathname === href;
   };
 
@@ -181,24 +169,6 @@ export default function Navbar() {
                     >
                       Leaderboard
                     </Link>
-                    {isAdmin && (
-                      <Link
-                        href="/admin"
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="block px-3.5 py-2 text-xs text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 transition-colors font-medium"
-                      >
-                        Admin Console
-                      </Link>
-                    )}
-                    {isCurator && (
-                      <Link
-                        href="/moderator"
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="block px-3.5 py-2 text-xs text-indigo-300 hover:text-indigo-200 hover:bg-indigo-500/10 transition-colors font-medium"
-                      >
-                        Moderator Studio
-                      </Link>
-                    )}
                     <button
                       type="button"
                       onClick={() => {

@@ -26,6 +26,7 @@ ROOT_DIR = Path(__file__).parent.resolve()
 BACKEND_DIR = ROOT_DIR / "backend"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 WORKER_DIR = ROOT_DIR / "worker"
+ADMIN_FRONTEND_DIR = ROOT_DIR / "admin-frontend"
 
 
 def check_tcp_port(host: str, port: int, timeout: float = 1.0) -> bool:
@@ -168,6 +169,11 @@ async def main() -> None:
         print(f"\n{BOLD}Installing frontend dependencies with bun...{RESET}")
         await run_subprocess_cmd(["bun", "install"], cwd=FRONTEND_DIR)
 
+    # 4. Ensure Admin Frontend Dependencies
+    if ADMIN_FRONTEND_DIR.is_dir() and not (ADMIN_FRONTEND_DIR / "node_modules").is_dir():
+        print(f"\n{BOLD}Installing admin-frontend dependencies with bun...{RESET}")
+        await run_subprocess_cmd(["bun", "install"], cwd=ADMIN_FRONTEND_DIR)
+
     # Set up environment with PYTHONPATH
     env = os.environ.copy()
     env["PYTHONPATH"] = (
@@ -187,6 +193,10 @@ async def main() -> None:
     print(
         f"  - {GREEN}{BOLD}[frontend]{RESET} Next.js Web App        -> http://localhost:3000"
     )
+    if ADMIN_FRONTEND_DIR.is_dir():
+        print(
+            f"  - {MAGENTA}{BOLD}[admin]{RESET}    Admin/Moderator Portal -> http://localhost:3001"
+        )
     print(f"\n{BOLD}Press [Ctrl+C] to stop all services simultaneously.{RESET}\n")
 
     # Start child processes in new process groups for clean process tree termination
@@ -249,7 +259,6 @@ async def main() -> None:
         except NotImplementedError:
             pass
 
-    # Background tasks for streaming output and process monitoring
     tasks: list[asyncio.Task] = [
         asyncio.create_task(
             stream_output(backend_proc.stdout, f"{CYAN}[backend]{RESET} ")
@@ -261,6 +270,23 @@ async def main() -> None:
             stream_output(frontend_proc.stdout, f"{GREEN}[frontend]{RESET}")
         ),
     ]
+
+    if ADMIN_FRONTEND_DIR.is_dir():
+        admin_proc = await asyncio.create_subprocess_exec(
+            "bun",
+            "dev",
+            cwd=ADMIN_FRONTEND_DIR,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
+        )
+        processes.append(("Admin Portal", admin_proc))
+        tasks.append(
+            asyncio.create_task(
+                stream_output(admin_proc.stdout, f"{MAGENTA}[admin]{RESET}   ")
+            )
+        )
 
     for name, proc in processes:
         tasks.append(asyncio.create_task(monitor_process(proc, name, shutdown_event)))

@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
-import AccessDenied from "./AccessDenied";
 import Code0Loader from "./Code0Loader";
 
 function isPublicRoute(pathname) {
@@ -75,23 +74,6 @@ export default function AuthGuard({ children }) {
         <Code0Loader fullscreen={false} text="Redirecting to login..." />
       </div>
     );
-  }
-
-  // Role-Based Access Control checks for authenticated users
-  if (user) {
-    // Admin routes: ONLY users with role "admin"
-    if (cleanPath.startsWith("/admin")) {
-      if (user.role !== "admin") {
-        return <AccessDenied requiredRole="admin" />;
-      }
-    }
-
-    // Moderator routes: Users with role "moderator" or "admin"
-    if (cleanPath.startsWith("/moderator")) {
-      if (user.role !== "moderator" && user.role !== "admin") {
-        return <AccessDenied requiredRole="moderator" />;
-      }
-    }
   }
 
   return <>{children}</>;
