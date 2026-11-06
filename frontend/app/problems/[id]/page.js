@@ -143,6 +143,12 @@ export default function ProblemDetailPage() {
     let isMounted = true;
 
     async function fetchProblem() {
+      if (!/^\d+$/.test(String(problemId).trim())) {
+        setError(`Invalid problem ID "${problemId}". Problem identifiers must be positive integers.`);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError("");
       try {

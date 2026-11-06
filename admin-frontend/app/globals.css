@@ -207,6 +207,7 @@ body {
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  text-decoration: none; /* needed when rendered as <a> via Next.js Link */
 }
 
 .nav-tab-btn:hover {
@@ -510,6 +511,8 @@ body {
 }
 
 .form-input, .form-select, .form-textarea {
+  width: 100%;
+  box-sizing: border-box;
   background: var(--bg-input);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-md);
@@ -776,6 +779,84 @@ body {
   border-left: 4px solid var(--color-info);
 }
 
+/* ------------------------------------------------------------------ */
+/* Missing class aliases & additions                                   */
+/* ------------------------------------------------------------------ */
+
+/* Spin keyframe (used by loading spinners) */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* admin-page-content — full-height wrapper inside admin-container */
+.admin-page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* section-header — flex row that holds a title/subtitle + action button */
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* data-table-container — bordered, scrollable table wrapper */
+.data-table-container {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+/* modal-backdrop  — alias for modal-overlay */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1.5rem;
+  animation: fadeIn 150ms ease-out;
+}
+
+/* modal-card — alias for modal-dialog */
+.modal-card {
+  background: #0f131d;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg), 0 0 50px rgba(0, 0, 0, 0.85);
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  animation: scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* badge-pending  — upcoming / waiting state (indigo tint) */
+.badge-pending {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+/* badge-danger — aliased for cancelled / error state */
+.badge-danger {
+  background: var(--color-danger-bg);
+  color: #fca5a5;
+  border: 1px solid var(--color-danger-border);
+}
+
+/* ------------------------------------------------------------------ */
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -805,10 +886,20 @@ body {
 
 .markdown-preview-pane h1,
 .markdown-preview-pane h2,
-.markdown-preview-pane h3 {
+.markdown-preview-pane h3,
+.markdown-preview-pane h4 {
   color: #ffffff;
   margin-top: 1.25rem;
   margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.markdown-preview-pane h1 { font-size: 1.4rem; }
+.markdown-preview-pane h2 { font-size: 1.2rem; }
+.markdown-preview-pane h3 { font-size: 1.05rem; }
+
+.markdown-preview-pane p {
+  margin-bottom: 0.85rem;
 }
 
 .markdown-preview-pane code {
@@ -816,6 +907,7 @@ body {
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
   font-family: monospace;
+  font-size: 0.875rem;
 }
 
 .markdown-preview-pane pre {
@@ -823,7 +915,57 @@ body {
   padding: 1rem;
   border-radius: var(--radius-md);
   overflow-x: auto;
+  margin: 0.75rem 0 1rem;
+  border: 1px solid var(--border-subtle);
+}
+
+.markdown-preview-pane pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-preview-pane ul,
+.markdown-preview-pane ol {
+  margin: 0.5rem 0 1rem 1.5rem;
+}
+
+.markdown-preview-pane li {
+  margin-bottom: 0.25rem;
+}
+
+.markdown-preview-pane blockquote {
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 1rem;
   margin: 0.75rem 0;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.markdown-preview-pane table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+
+.markdown-preview-pane th,
+.markdown-preview-pane td {
+  border: 1px solid var(--border-medium);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-preview-pane th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.markdown-preview-pane .katex-display {
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
 }
 
 /* Responsive */

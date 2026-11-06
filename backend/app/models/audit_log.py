@@ -24,6 +24,11 @@ class AuditLogAction(str, enum.Enum):
     MODERATOR_ACTION = "moderator_action"
     AUTH_LOGIN = "auth_login"
     SECURITY_VIOLATION = "security_violation"
+    CONTEST_CREATE = "contest_create"
+    CONTEST_UPDATE = "contest_update"
+    CONTEST_DELETE = "contest_delete"
+    CONTEST_PROBLEM_ASSIGN = "contest_problem_assign"
+    CONTEST_PROBLEM_REMOVE = "contest_problem_remove"
 
 
 class AuditLogStatus(str, enum.Enum):

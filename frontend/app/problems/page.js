@@ -114,9 +114,25 @@ export default function ProblemsPage() {
             </p>
           </div>
 
-          <div className="flex items-center space-x-2 text-xs text-slate-300 bg-[#0a0d14] px-3.5 py-1.5 rounded-xl border border-white/[0.08] shadow-md shadow-black/30">
-            <span className="text-slate-400">Total Challenges:</span>
-            <span className="font-bold text-white font-mono">{total}</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center space-x-2 text-xs text-slate-300 bg-[#0a0d14] px-3.5 py-1.5 rounded-xl border border-white/[0.08] shadow-md shadow-black/30">
+              <span className="text-slate-400">Total Challenges:</span>
+              <span className="font-bold text-white font-mono">{total}</span>
+            </div>
+            {user && (user.role === "admin" || user.role === "moderator") && (
+              <a
+                href="http://localhost:3001"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm transition-colors"
+                title="Author and manage problems in Staff Control Center"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Author Problem
+              </a>
+            )}
           </div>
         </div>
 

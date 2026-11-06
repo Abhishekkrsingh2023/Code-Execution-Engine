@@ -69,6 +69,9 @@ class SubmissionRequest(BaseModel):
     user_id: str | None = Field(
         default=None, description="Optional user ID associated with the submission."
     )
+    contest_id: uuid.UUID | None = Field(
+        default=None, description="Optional UUID of the contest this submission belongs to."
+    )
 
     model_config = ConfigDict(
         use_enum_values=True,

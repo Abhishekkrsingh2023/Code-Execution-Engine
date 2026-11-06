@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.problem import ProblemDifficulty, ProblemStatus
 
@@ -260,10 +261,20 @@ class FullProblemCreateRequest(BaseModel):
         default_factory=list, description="Submit/hidden test cases [{input, expected_output}]."
     )
 
-    # Multi-language templates
+    # Multi-language templates (accepts list of items or {lang: code} dict)
     templates: list[ProblemTemplateItem] = Field(
         default_factory=list, description="Language-specific starter and driver templates."
     )
+
+    @field_validator("templates", mode="before")
+    @classmethod
+    def normalize_templates(cls, v: Any) -> Any:
+        if isinstance(v, dict):
+            return [
+                {"language": lang, "boilerplate_code": code}
+                for lang, code in v.items()
+            ]
+        return v
 
     model_config = ConfigDict(
         use_enum_values=True,

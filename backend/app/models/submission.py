@@ -1,7 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
@@ -12,6 +12,7 @@ from app.database import Base
 from app.models.base import _utcnow
 
 if TYPE_CHECKING:
+    from app.models.contest import Contest
     from app.models.problem import Problem
     from app.models.submission_result import SubmissionResult
     from app.models.user import User
@@ -55,6 +56,12 @@ class Submission(Base):
     problem_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("problems.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
+    contest_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("contests.id", ondelete="CASCADE"),
         index=True,
         nullable=True,
     )
@@ -124,6 +131,9 @@ class Submission(Base):
         back_populates="submissions",
     )
     problem: Mapped["Problem"] = relationship(
+        back_populates="submissions",
+    )
+    contest: Mapped[Optional["Contest"]] = relationship(
         back_populates="submissions",
     )
     submission_results: Mapped[list["SubmissionResult"]] = relationship(

@@ -1,18 +1,29 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { APP_NAME } from "@/lib/config";
 
-export default function AdminNavbar({ activeTab, setActiveTab }) {
+/**
+ * AdminNavbar — sticky top-bar for the admin portal.
+ *
+ * Uses Next.js App Router `usePathname` to determine the active segment,
+ * and `<Link>` for all navigation items (no prop-drilling of setActiveTab).
+ */
+export default function AdminNavbar() {
+  const pathname = usePathname();
   const { user, isAdmin, isModerator, logout } = useAuth();
 
   const roleName = user?.role || "staff";
 
+  const isActive = (prefix) => pathname.startsWith(prefix);
+
   return (
     <header className="admin-navbar">
       {/* Brand & Role Identification */}
-      <div className="navbar-brand">
+      <Link href={isAdmin ? "/dashboard" : "/problems"} className="navbar-brand">
         <Image
           src="/Code0.png"
           alt="Code0"
@@ -36,15 +47,14 @@ export default function AdminNavbar({ activeTab, setActiveTab }) {
             Isolated Operational Console
           </span>
         </div>
-      </div>
+      </Link>
 
       {/* Navigation Tabs */}
       <nav className="nav-tabs">
         {isAdmin && (
-          <button
-            type="button"
-            className={`nav-tab-btn ${activeTab === "stats" ? "active" : ""}`}
-            onClick={() => setActiveTab("stats")}
+          <Link
+            href="/dashboard"
+            className={`nav-tab-btn ${isActive("/dashboard") ? "active" : ""}`}
           >
             <svg
               style={{ width: "16px", height: "16px" }}
@@ -59,14 +69,13 @@ export default function AdminNavbar({ activeTab, setActiveTab }) {
                 d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
               />
             </svg>
-            Telemetry & Stats
-          </button>
+            Telemetry &amp; Stats
+          </Link>
         )}
 
-        <button
-          type="button"
-          className={`nav-tab-btn ${activeTab === "problems" ? "active" : ""}`}
-          onClick={() => setActiveTab("problems")}
+        <Link
+          href="/problems"
+          className={`nav-tab-btn ${isActive("/problems") ? "active" : ""}`}
         >
           <svg
             style={{ width: "16px", height: "16px" }}
@@ -82,12 +91,31 @@ export default function AdminNavbar({ activeTab, setActiveTab }) {
             />
           </svg>
           Problem Management
-        </button>
+        </Link>
 
-        <button
-          type="button"
-          className={`nav-tab-btn ${activeTab === "templates" ? "active" : ""}`}
-          onClick={() => setActiveTab("templates")}
+        <Link
+          href="/contests"
+          className={`nav-tab-btn ${isActive("/contests") ? "active" : ""}`}
+        >
+          <svg
+            style={{ width: "16px", height: "16px" }}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+            />
+          </svg>
+          Contests &amp; Tournaments
+        </Link>
+
+        <Link
+          href="/templates"
+          className={`nav-tab-btn ${isActive("/templates") ? "active" : ""}`}
         >
           <svg
             style={{ width: "16px", height: "16px" }}
@@ -103,13 +131,12 @@ export default function AdminNavbar({ activeTab, setActiveTab }) {
             />
           </svg>
           Common Templates
-        </button>
+        </Link>
 
         {isAdmin && (
-          <button
-            type="button"
-            className={`nav-tab-btn ${activeTab === "users" ? "active" : ""}`}
-            onClick={() => setActiveTab("users")}
+          <Link
+            href="/users"
+            className={`nav-tab-btn ${isActive("/users") ? "active" : ""}`}
           >
             <svg
               style={{ width: "16px", height: "16px" }}
@@ -125,14 +152,13 @@ export default function AdminNavbar({ activeTab, setActiveTab }) {
               />
             </svg>
             User Governance
-          </button>
+          </Link>
         )}
 
         {isAdmin && (
-          <button
-            type="button"
-            className={`nav-tab-btn ${activeTab === "audit" ? "active" : ""}`}
-            onClick={() => setActiveTab("audit")}
+          <Link
+            href="/audit"
+            className={`nav-tab-btn ${isActive("/audit") ? "active" : ""}`}
           >
             <svg
               style={{ width: "16px", height: "16px" }}
@@ -148,7 +174,7 @@ export default function AdminNavbar({ activeTab, setActiveTab }) {
               />
             </svg>
             Audit Logs
-          </button>
+          </Link>
         )}
       </nav>
 

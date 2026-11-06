@@ -132,11 +132,13 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
 
   const openCreateModal = () => {
     resetForm();
+    setSelectedProblemId(null);
     setModalMode("create");
     setShowModal(true);
   };
 
   const openEditModal = async (prob) => {
+    if (!prob?.id) return;
     setSelectedProblemId(prob.id);
     setModalMode("edit");
     setModalTab("basics");
@@ -188,18 +190,41 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
     setSaving(true);
     try {
       if (modalMode === "create") {
-        await api.post("/api-v1/problems/full", formData);
+        const payload = {
+          title: formData.title.trim(),
+          description: formData.description.trim(),
+          difficulty: formData.difficulty,
+          category: formData.category.trim() || "Algorithms",
+          topic: formData.topic.trim() || "array",
+          time_limit: parseFloat(formData.time_limit) || 2.0,
+          memory_limit: parseInt(formData.memory_limit, 10) || 256,
+          status: formData.status || "published",
+          run_test_cases: (formData.run_test_cases || []).filter(
+            (tc) => tc.input?.trim() || tc.expected_output?.trim()
+          ),
+          submit_test_cases: (formData.submit_test_cases || []).filter(
+            (tc) => tc.input?.trim() || tc.expected_output?.trim()
+          ),
+          templates: Object.entries(formData.templates || {}).map(([lang, code]) => ({
+            language: lang,
+            boilerplate_code: code,
+          })),
+        };
+        await api.post("/api-v1/problems/full", payload);
         showToast?.("Problem created and published successfully!", "success");
       } else {
+        if (!selectedProblemId) {
+          throw new Error("No valid problem selected for modification.");
+        }
         await api.patch(`/api-v1/problems/${selectedProblemId}`, {
-          title: formData.title,
-          description: formData.description,
+          title: formData.title.trim(),
+          description: formData.description.trim(),
           difficulty: formData.difficulty,
-          category: formData.category,
-          topic: formData.topic,
-          time_limit: formData.time_limit,
-          memory_limit: formData.memory_limit,
-          status: formData.status,
+          category: formData.category.trim() || "Algorithms",
+          topic: formData.topic.trim() || "array",
+          time_limit: parseFloat(formData.time_limit) || 2.0,
+          memory_limit: parseInt(formData.memory_limit, 10) || 256,
+          status: formData.status || "published",
         });
         showToast?.("Problem details updated successfully!", "success");
       }

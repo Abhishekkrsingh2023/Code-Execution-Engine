@@ -85,6 +85,25 @@ The frontend utilizes SSE (`EventSource`) with automatic fallback to polling if 
 | `GET` | `/api-v1/admin/stats/activity` | Yes | Admin | None | `SystemActivityStatsResponse` (`{ recent_admin_actions, recent_moderator_activity, user_creation_trend, problem_creation_trend }`) | `401`, `403` |
 | `GET` | `/api-v1/admin/audit-logs` | Yes | Admin | Query: `skip`, `limit`, `action`, `actor_id`, `actor_role`, `target_type`, `status`, `start_date`, `end_date` | `AuditLogListResponse` (`{ total, skip, limit, logs: [AuditLogResponse] }`) | `401`, `403`, `422` |
 | `GET` | `/api-v1/admin/audit-logs/{log_id}` | Yes | Admin | None | `AuditLogResponse` | `401`, `403`, `404` |
+| `POST` | `/api-v1/contests` | Yes | Moderator / Admin | `ContestCreateRequest` (`title, description?, start_time, end_time, status?, penalty_minutes?`) | `ContestResponse` (201 Created) | `400`, `401`, `403`, `422` |
+| `GET` | `/api-v1/contests` | No | Public (Staff sees drafts) | Query: `skip, limit, status, search` | `ContestListResponse` (`{ total, skip, limit, contests: [ContestResponse] }`) | `422` |
+| `GET` | `/api-v1/contests/{contest_id}` | No | Public (Staff sees drafts) | None | `ContestResponse` | `404 Not Found` |
+| `PATCH` | `/api-v1/contests/{contest_id}` | Yes | Moderator / Admin | `ContestUpdateRequest` (`title?, description?, start_time?, end_time?, status?, penalty_minutes?`) | `ContestResponse` | `400`, `401`, `403`, `404`, `422` |
+| `DELETE` | `/api-v1/contests/{contest_id}` | Yes | Moderator / Admin | None | `MessageResponse` (`{ message }`) | `401`, `403`, `404` |
+| `POST` | `/api-v1/contests/{contest_id}/register` | Yes | Active User | None | `ContestParticipantResponse` (201 Created) | `400`, `401`, `403`, `404`, `409 Conflict` |
+| `DELETE` | `/api-v1/contests/{contest_id}/register` | Yes | Active User | None | `MessageResponse` (`{ message }`) | `400`, `401`, `404` |
+| `POST` | `/api-v1/contests/{contest_id}/problems` | Yes | Moderator / Admin | `ContestProblemAssignRequest` (`problem_id, points?, order_index?`) | `ContestProblemResponse` (201 Created) | `401`, `403`, `404`, `409`, `422` |
+| `DELETE` | `/api-v1/contests/{contest_id}/problems/{problem_id}` | Yes | Moderator / Admin | None | `MessageResponse` (`{ message }`) | `401`, `403`, `404` |
+| `PATCH` | `/api-v1/contests/{contest_id}/problems/{problem_id}` | Yes | Moderator / Admin | `ContestProblemUpdateRequest` (`points?, order_index?`) | `ContestProblemResponse` | `401`, `403`, `404`, `422` |
+| `GET` | `/api-v1/contests/{contest_id}/problems` | No | Public (Active/Completed or Staff) | None | `list[ContestProblemResponse]` | `403 Forbidden (Upcoming)`, `404` |
+| `GET` | `/api-v1/contests/{contest_id}/problems/{problem_id}` | No | Public (Active/Completed or Staff) | None | `ContestProblemDetailResponse` | `403 Forbidden (Upcoming)`, `404` |
+| `POST` | `/api-v1/contests/{contest_id}/submit` | Yes | Registered Active User | `ContestSubmitRequest` (`problem_id, user_code, language, time_limit?`) | `{ message, submission: UUID, status: "queued", mode: "submit", streaming_url, polling_url }` | `400`, `401`, `403`, `404`, `422` |
+| `POST` | `/api-v1/contests/{contest_id}/run` | Optional | Any | `ContestRunRequest` (`problem_id, user_code, language, test_cases?, time_limit?`) | `{ message, submission: UUID, status: "queued", mode: "run", streaming_url, polling_url }` | `400`, `403`, `404`, `422` |
+| `GET` | `/api-v1/contests/{contest_id}/leaderboard` | No | Public | Query: `skip, limit` | `ContestLeaderboardResponse` (`{ contest_id, contest_title, status, total_participants, winner, leaderboard, my_rank }`) | `404 Not Found` |
+| `GET` | `/api-v1/contests/{contest_id}/leaderboard/me` | Yes | Active User | None | `ContestLeaderboardEntry` | `401`, `404 Not Found` |
+| `GET` | `/api-v1/contests/{contest_id}/participants` | No | Public | Query: `skip, limit` | `list[ContestParticipantResponse]` | `404 Not Found` |
+| `GET` | `/api-v1/contests/{contest_id}/submissions` | Yes | Moderator / Admin | Query: `skip, limit, user_id?, problem_id?` | `ContestSubmissionListResponse` | `401`, `403`, `404` |
+| `GET` | `/api-v1/contests/{contest_id}/my-submissions` | Yes | Active User | Query: `skip, limit` | `ContestSubmissionListResponse` | `401`, `404` |
 
 ---
 

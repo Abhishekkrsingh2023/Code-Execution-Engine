@@ -231,6 +231,14 @@ async def _record_submission_in_session(
     updated_solved = None
     if user_id:
         updated_score, updated_solved = await update_user_leaderboard_score(user_id, db)
+        if submission.contest_id:
+            try:
+                from app.services.contest_service import recalculate_contest_participant_stats
+                await recalculate_contest_participant_stats(submission.contest_id, user_id, db)
+            except Exception as c_exc:
+                logger.warning(
+                    "Failed to recalculate contest stats for submission {}: {}", sub_uuid, c_exc
+                )
 
     return {
         "submission_id": str(sub_uuid),

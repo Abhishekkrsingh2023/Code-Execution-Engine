@@ -46,6 +46,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: "Problems", href: "/problems" },
+    { name: "Contests", href: "/contests" },
     { name: "Leaderboard", href: "/leaderboard" },
     { name: "About", href: "/about" },
   ];
@@ -56,10 +57,12 @@ export default function Navbar() {
 
   // Check if current route is within a problem detail page to maximize width
   const isProblemDetail =
-    pathname.startsWith("/problems/") && pathname !== "/problems";
+    (pathname.startsWith("/problems/") && pathname !== "/problems") ||
+    pathname.includes("/problems/");
 
   const isLinkActive = (href) => {
     if (href === "/problems") return pathname.startsWith("/problems");
+    if (href === "/contests") return pathname.startsWith("/contests");
     if (href === "/leaderboard") return pathname.startsWith("/leaderboard");
     if (href === "/about") return pathname === "/about" || pathname === "/abouts";
     if (href === "/profile") return pathname.startsWith("/profile");
@@ -169,6 +172,16 @@ export default function Navbar() {
                     >
                       Leaderboard
                     </Link>
+                    {(user.role === "admin" || user.role === "moderator") && (
+                      <a
+                        href="http://localhost:3001"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block px-3.5 py-2 text-xs text-indigo-400 font-medium hover:text-indigo-300 hover:bg-indigo-950/40 transition-colors border-t border-white/[0.06]"
+                      >
+                        Staff Control Portal ↗
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={() => {

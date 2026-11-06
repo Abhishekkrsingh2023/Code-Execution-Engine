@@ -1,5 +1,6 @@
 from app.models.audit_log import AuditLog, AuditLogAction, AuditLogStatus
 from app.models.base import _utcnow
+from app.models.contest import Contest, ContestParticipant, ContestProblem, ContestStatus
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.models.problem_template import CommonProblemTemplate, ProblemTemplate
 from app.models.submission import Submission, SubmissionLanguage, SubmissionStatus
@@ -12,6 +13,10 @@ __all__ = [
     "AuditLogAction",
     "AuditLogStatus",
     "CommonProblemTemplate",
+    "Contest",
+    "ContestParticipant",
+    "ContestProblem",
+    "ContestStatus",
     "JudgeStatus",
     "Problem",
     "ProblemDifficulty",

@@ -57,6 +57,12 @@ class Submission(Base):
         index=True,
         nullable=True,
     )
+    contest_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("contests.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
     problem_name: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
