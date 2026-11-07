@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Request, status
 from loguru import logger
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import _utcnow
@@ -167,7 +167,131 @@ async def handle_update_problem(
         changes["status"] = {"old": to_str_val(problem.status), "new": to_str_val(payload.status)}
         problem.status = payload.status
 
+    test_cases_updated = False
+    run_cases: list[dict] = []
+    submit_cases: list[dict] = []
+    templates_updated = False
+
     try:
+        # 1. Update test cases if supplied
+        if payload.run_test_cases is not None or payload.submit_test_cases is not None:
+            test_cases_updated = True
+
+            # Check existing common template or problem test cases
+            stmt_common = select(CommonProblemTemplate).where(
+                or_(
+                    CommonProblemTemplate.problem_id == problem.id,
+                    CommonProblemTemplate.problem_statement == problem.description,
+                )
+            )
+            existing_common = (await db.execute(stmt_common)).scalar_one_or_none()
+
+            if payload.run_test_cases is not None:
+                run_cases = payload.run_test_cases
+            elif existing_common and existing_common.run_test_cases:
+                run_cases = list(existing_common.run_test_cases)
+            else:
+                run_cases = [tc.to_dict() for tc in problem.test_cases if tc.is_sample]
+
+            if payload.submit_test_cases is not None:
+                submit_cases = payload.submit_test_cases
+            elif existing_common and existing_common.submit_test_cases:
+                submit_cases = list(existing_common.submit_test_cases)
+            else:
+                submit_cases = [tc.to_dict() for tc in problem.test_cases if not tc.is_sample]
+
+            # Recreate test cases in TestCase table
+            await db.execute(delete(TestCase).where(TestCase.problem_id == problem.id))
+
+            for tc in run_cases:
+                tc_row = TestCase(
+                    problem_id=problem.id,
+                    input=str(tc.get("input", "")),
+                    expected_output=str(tc.get("expected_output", "")),
+                    is_sample=True,
+                    weight=1.0,
+                )
+                db.add(tc_row)
+
+            for tc in submit_cases:
+                try:
+                    w = float(tc.get("weight", 1.0))
+                except (ValueError, TypeError):
+                    w = 1.0
+                tc_row = TestCase(
+                    problem_id=problem.id,
+                    input=str(tc.get("input", "")),
+                    expected_output=str(tc.get("expected_output", "")),
+                    is_sample=False,
+                    weight=w,
+                )
+                db.add(tc_row)
+
+            # Update or create CommonProblemTemplate
+            if existing_common:
+                existing_common.run_test_cases = run_cases
+                existing_common.submit_test_cases = submit_cases
+                existing_common.problem_statement = problem.description
+                existing_common.time_limit = problem.time_limit
+                existing_common.updated_at = _utcnow()
+            else:
+                common_tmpl = CommonProblemTemplate(
+                    problem_id=problem.id,
+                    problem_statement=problem.description,
+                    run_test_cases=run_cases,
+                    submit_test_cases=submit_cases,
+                    time_limit=problem.time_limit,
+                )
+                db.add(common_tmpl)
+
+            await db.flush()
+
+        # 2. Update templates if supplied
+        if payload.templates is not None:
+            templates_updated = True
+            # Ensure CommonProblemTemplate exists first due to foreign key constraint
+            stmt_common_for_tmpl = select(CommonProblemTemplate).where(
+                CommonProblemTemplate.problem_id == problem.id
+            )
+            existing_common_tmpl = (await db.execute(stmt_common_for_tmpl)).scalar_one_or_none()
+            if not existing_common_tmpl:
+                existing_common_tmpl = CommonProblemTemplate(
+                    problem_id=problem.id,
+                    problem_statement=problem.description,
+                    run_test_cases=[],
+                    submit_test_cases=[],
+                    time_limit=problem.time_limit,
+                )
+                db.add(existing_common_tmpl)
+                await db.flush()
+
+            for tmpl in payload.templates:
+                stmt_tmpl = select(ProblemTemplate).where(
+                    ProblemTemplate.problem_id == problem.id,
+                    ProblemTemplate.language == tmpl.language,
+                )
+                existing_tmpl = (await db.execute(stmt_tmpl)).scalar_one_or_none()
+                if existing_tmpl:
+                    existing_tmpl.boilerplate_code = tmpl.boilerplate_code
+                    existing_tmpl.updated_at = _utcnow()
+                else:
+                    pt = ProblemTemplate(
+                        problem_id=problem.id,
+                        language=tmpl.language,
+                        boilerplate_code=tmpl.boilerplate_code,
+                    )
+                    db.add(pt)
+
+        if test_cases_updated:
+            changes["test_cases"] = {
+                "run_cases_count": str(len(run_cases)),
+                "submit_cases_count": str(len(submit_cases)),
+            }
+        if templates_updated and payload.templates:
+            changes["templates"] = {
+                "templates_count": str(len(payload.templates)),
+            }
+
         problem.updated_at = _utcnow()
         await db.commit()
         await db.refresh(problem)
@@ -580,11 +704,13 @@ async def handle_get_full_problem(
     common_tmpl = (await db.execute(stmt_common)).scalars().first()
 
     run_tcs: list[dict] = []
+    submit_tcs: list[dict] = []
     templates: list[ProblemTemplateResponse] = []
 
     if common_tmpl:
         code_id = common_tmpl.problem_id
         run_tcs = list(common_tmpl.run_test_cases or [])
+        submit_tcs = list(common_tmpl.submit_test_cases or [])
         templates = [
             ProblemTemplateResponse.model_validate(t) for t in (common_tmpl.templates or [])
         ]
@@ -595,11 +721,14 @@ async def handle_get_full_problem(
         selected_cases = sample_cases if sample_cases else list(problem.test_cases)
         run_tcs = [tc.to_dict() for tc in selected_cases]
 
+    # If common template didn't have submit test cases, fall back to evaluation test cases from DB
+    if not submit_tcs and problem.test_cases:
+        eval_cases = [tc for tc in problem.test_cases if not tc.is_sample]
+        submit_tcs = [tc.to_dict() for tc in eval_cases]
+
     total_count = len(problem.test_cases)
     if total_count == 0 and common_tmpl:
-        total_count = len(common_tmpl.run_test_cases or []) + len(
-            common_tmpl.submit_test_cases or []
-        )
+        total_count = len(run_tcs) + len(submit_tcs)
 
     return FullProblemResponse(
         problem=ProblemResponse.model_validate(problem),

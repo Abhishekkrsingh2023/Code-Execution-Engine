@@ -67,6 +67,19 @@ class ProblemCreateRequest(BaseModel):
     )
 
 
+class ProblemTemplateItem(BaseModel):
+    """Schema for a language problem template item."""
+
+    language: str = Field(
+        max_length=20, description="Programming language (e.g. python, cpp)."
+    )
+    boilerplate_code: str | None = Field(
+        default=None, description="Starter boilerplate code for user, if any."
+    )
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
 class ProblemUpdateRequest(BaseModel):
     """Schema for updating problem fields."""
 
@@ -78,6 +91,19 @@ class ProblemUpdateRequest(BaseModel):
     time_limit: float | None = Field(None, ge=0.1, le=30.0)
     memory_limit: int | None = Field(None, ge=16, le=2048)
     status: ProblemStatus | None = None
+    run_test_cases: list[dict] | None = None
+    submit_test_cases: list[dict] | None = None
+    templates: list[ProblemTemplateItem] | None = None
+
+    @field_validator("templates", mode="before")
+    @classmethod
+    def normalize_templates(cls, v: Any) -> Any:
+        if isinstance(v, dict):
+            return [
+                {"language": lang, "boilerplate_code": code}
+                for lang, code in v.items()
+            ]
+        return v
 
     model_config = ConfigDict(
         use_enum_values=True,
@@ -162,19 +188,6 @@ class TestCaseResponse(BaseModel):
     weight: float = Field( description="Score weight.")
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class ProblemTemplateItem(BaseModel):
-    """Schema for a language problem template item."""
-
-    language: str = Field(
-         max_length=20, description="Programming language (e.g. python, cpp)."
-    )
-    boilerplate_code: str | None = Field(
-        default=None, description="Starter boilerplate code for user, if any."
-    )
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
 class ProblemTemplateResponse(BaseModel):

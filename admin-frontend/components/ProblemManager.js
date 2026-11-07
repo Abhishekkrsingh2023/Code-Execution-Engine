@@ -147,6 +147,59 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
     try {
       const full = await api.get(`/api-v1/problems/${prob.id}/full`);
       const p = full?.problem || prob;
+
+      const templateMap = {
+        python: DEFAULT_PYTHON_TEMPLATE,
+        cpp: DEFAULT_CPP_TEMPLATE,
+        java: DEFAULT_JAVA_TEMPLATE,
+        c: DEFAULT_C_TEMPLATE,
+      };
+      if (Array.isArray(full?.templates)) {
+        full.templates.forEach((t) => {
+          if (t?.language && t?.boilerplate_code !== undefined && t?.boilerplate_code !== null) {
+            templateMap[t.language.toLowerCase()] = t.boilerplate_code;
+          }
+        });
+      } else if (full?.templates && typeof full.templates === "object") {
+        Object.assign(templateMap, full.templates);
+      }
+
+      let runTests = full?.run_test_cases?.length ? full.run_test_cases : [];
+      let submitTests = full?.submit_test_cases?.length ? full.submit_test_cases : [];
+
+      if (!submitTests.length) {
+        try {
+          const allTcs = await api.get(`/api-v1/problems/${prob.id}/test-cases`);
+          if (Array.isArray(allTcs) && allTcs.length > 0) {
+            if (!runTests.length) {
+              runTests = allTcs
+                .filter((t) => t.is_sample)
+                .map((t) => ({ input: t.input, expected_output: t.expected_output }));
+            }
+            submitTests = allTcs
+              .filter((t) => !t.is_sample)
+              .map((t) => ({
+                input: t.input,
+                expected_output: t.expected_output,
+                weight: t.weight || 1.0,
+              }));
+          }
+        } catch {
+          // Ignore fallback errors
+        }
+      }
+
+      if (!submitTests.length) {
+        try {
+          const common = await api.get(`/api-v1/problems/templates/common/${prob.id}`);
+          if (common?.submit_test_cases?.length) {
+            submitTests = common.submit_test_cases;
+          }
+        } catch {
+          // Ignore fallback errors
+        }
+      }
+
       setFormData({
         title: p.title || "",
         description: p.description || "",
@@ -156,18 +209,13 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
         time_limit: p.time_limit || 2.0,
         memory_limit: p.memory_limit || 256,
         status: p.status || "published",
-        run_test_cases: full?.run_test_cases?.length
-          ? full.run_test_cases
+        run_test_cases: runTests.length
+          ? runTests
           : [{ input: "", expected_output: "" }],
-        submit_test_cases: full?.submit_test_cases?.length
-          ? full.submit_test_cases
+        submit_test_cases: submitTests.length
+          ? submitTests
           : [{ input: "", expected_output: "" }],
-        templates: {
-          python: full?.templates?.python || DEFAULT_PYTHON_TEMPLATE,
-          cpp: full?.templates?.cpp || DEFAULT_CPP_TEMPLATE,
-          java: full?.templates?.java || DEFAULT_JAVA_TEMPLATE,
-          c: full?.templates?.c || DEFAULT_C_TEMPLATE,
-        },
+        templates: templateMap,
       });
     } catch {
       // Fallback to basic problem data
@@ -189,6 +237,17 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
     e.preventDefault();
     setSaving(true);
     try {
+      const filteredRunTests = (formData.run_test_cases || []).filter(
+        (tc) => tc.input?.trim() || tc.expected_output?.trim()
+      );
+      const filteredSubmitTests = (formData.submit_test_cases || []).filter(
+        (tc) => tc.input?.trim() || tc.expected_output?.trim()
+      );
+      const templateList = Object.entries(formData.templates || {}).map(([lang, code]) => ({
+        language: lang,
+        boilerplate_code: code,
+      }));
+
       if (modalMode === "create") {
         const payload = {
           title: formData.title.trim(),
@@ -199,16 +258,9 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
           time_limit: parseFloat(formData.time_limit) || 2.0,
           memory_limit: parseInt(formData.memory_limit, 10) || 256,
           status: formData.status || "published",
-          run_test_cases: (formData.run_test_cases || []).filter(
-            (tc) => tc.input?.trim() || tc.expected_output?.trim()
-          ),
-          submit_test_cases: (formData.submit_test_cases || []).filter(
-            (tc) => tc.input?.trim() || tc.expected_output?.trim()
-          ),
-          templates: Object.entries(formData.templates || {}).map(([lang, code]) => ({
-            language: lang,
-            boilerplate_code: code,
-          })),
+          run_test_cases: filteredRunTests,
+          submit_test_cases: filteredSubmitTests,
+          templates: templateList,
         };
         await api.post("/api-v1/problems/full", payload);
         showToast?.("Problem created and published successfully!", "success");
@@ -225,8 +277,11 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
           time_limit: parseFloat(formData.time_limit) || 2.0,
           memory_limit: parseInt(formData.memory_limit, 10) || 256,
           status: formData.status || "published",
+          run_test_cases: filteredRunTests,
+          submit_test_cases: filteredSubmitTests,
+          templates: templateList,
         });
-        showToast?.("Problem details updated successfully!", "success");
+        showToast?.("Problem details, test cases, and templates updated successfully!", "success");
       }
       setShowModal(false);
       fetchProblems();
@@ -578,26 +633,22 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
                 >
                   2. Statement & Markdown
                 </button>
-                {modalMode === "create" && (
-                  <>
-                    <button
-                      type="button"
-                      className={`modal-tab-btn ${modalTab === "tests" ? "active" : ""}`}
-                      onClick={() => setModalTab("tests")}
-                    >
-                      3. Test Cases Suite
-                    </button>
-                    <button
-                      type="button"
-                      className={`modal-tab-btn ${
-                        modalTab === "templates" ? "active" : ""
-                      }`}
-                      onClick={() => setModalTab("templates")}
-                    >
-                      4. Language Templates
-                    </button>
-                  </>
-                )}
+                <button
+                  type="button"
+                  className={`modal-tab-btn ${modalTab === "tests" ? "active" : ""}`}
+                  onClick={() => setModalTab("tests")}
+                >
+                  3. Test Cases Suite
+                </button>
+                <button
+                  type="button"
+                  className={`modal-tab-btn ${
+                    modalTab === "templates" ? "active" : ""
+                  }`}
+                  onClick={() => setModalTab("templates")}
+                >
+                  4. Language Templates
+                </button>
               </div>
 
               <div className="modal-body">
@@ -763,7 +814,7 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
                 )}
 
                 {/* TAB 3: Test Cases */}
-                {modalTab === "tests" && modalMode === "create" && (
+                {modalTab === "tests" && (
                   <div>
                     {/* Run Test Cases */}
                     <div style={{ marginBottom: "2rem" }}>
@@ -1008,7 +1059,7 @@ export default function ProblemManager({ showToast, setConfirmDialog }) {
                 )}
 
                 {/* TAB 4: Templates */}
-                {modalTab === "templates" && modalMode === "create" && (
+                {modalTab === "templates" && (
                   <div>
                     <p
                       style={{

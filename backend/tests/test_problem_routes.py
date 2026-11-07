@@ -106,6 +106,86 @@ class TestModeratorProblemActivities:
         assert audit_log is not None
         assert audit_log.status == "success"
 
+    async def test_moderator_update_problem_test_cases_success(
+        self,
+        async_client: AsyncClient,
+        moderator_user: User,
+        db_session: AsyncSession,
+    ) -> None:
+        """Moderator can update problem test cases and templates."""
+        from app.models.test_case import TestCase
+
+        problem = Problem(
+            title="Sum Array",
+            description="Sum all elements in array",
+            difficulty=ProblemDifficulty.EASY,
+            category="Algorithms",
+            topic="array",
+            created_by=moderator_user.id,
+        )
+        db_session.add(problem)
+        await db_session.commit()
+        await db_session.refresh(problem)
+
+        # Add initial test case
+        init_tc = TestCase(
+            problem_id=problem.id,
+            input="1 2\n",
+            expected_output="3",
+            is_sample=True,
+            weight=1.0,
+        )
+        db_session.add(init_tc)
+        await db_session.commit()
+
+        # Update problem with new run_test_cases and submit_test_cases
+        response = await async_client.patch(
+            f"/api-v1/problems/{problem.id}",
+            json={
+                "title": "Sum Array (Updated)",
+                "run_test_cases": [
+                    {"input": "3 4\n", "expected_output": "7"},
+                ],
+                "submit_test_cases": [
+                    {"input": "10 20\n", "expected_output": "30", "weight": 2.0},
+                    {"input": "-1 1\n", "expected_output": "0", "weight": 1.0},
+                ],
+            },
+            headers=auth_headers(moderator_user),
+        )
+        assert response.status_code == 200
+
+        # Verify test cases were updated in TestCase table
+        stmt_tcs = select(TestCase).where(TestCase.problem_id == problem.id).order_by(TestCase.id)
+        updated_tcs = (await db_session.execute(stmt_tcs)).scalars().all()
+        assert len(updated_tcs) == 3
+        sample_cases = [tc for tc in updated_tcs if tc.is_sample]
+        submit_cases = [tc for tc in updated_tcs if not tc.is_sample]
+        assert len(sample_cases) == 1
+        assert sample_cases[0].input == "3 4\n"
+        assert sample_cases[0].expected_output == "7"
+        assert len(submit_cases) == 2
+        assert submit_cases[0].expected_output == "30"
+        assert submit_cases[0].weight == 2.0
+
+        # Verify GET /api-v1/problems/{id}/full returns updated run test cases and count
+        full_res = await async_client.get(
+            f"/api-v1/problems/{problem.id}/full",
+            headers=auth_headers(moderator_user),
+        )
+        assert full_res.status_code == 200
+        full_data = full_res.json()
+        assert len(full_data["run_test_cases"]) == 1
+        assert full_data["test_cases_count"] == 3
+
+        # Verify GET /api-v1/problems/{id}/test-cases returns all 3 test cases
+        tcs_res = await async_client.get(
+            f"/api-v1/problems/{problem.id}/test-cases",
+            headers=auth_headers(moderator_user),
+        )
+        assert tcs_res.status_code == 200
+        assert len(tcs_res.json()) == 3
+
     async def test_moderator_update_publication_status_success(
         self,
         async_client: AsyncClient,
