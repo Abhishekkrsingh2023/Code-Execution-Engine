@@ -7,7 +7,6 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.problem import Problem
-    from app.models.submission_result import SubmissionResult
 
 
 class TestCase(Base):
@@ -49,11 +48,6 @@ class TestCase(Base):
     # Relationships
     problem: Mapped["Problem"] = relationship(
         back_populates="test_cases",
-    )
-    submission_results: Mapped[list["SubmissionResult"]] = relationship(
-        back_populates="test_case",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
     )
 
     def to_dict(self) -> dict[str, Any]:

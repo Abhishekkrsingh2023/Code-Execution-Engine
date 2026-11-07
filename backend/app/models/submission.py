@@ -14,7 +14,6 @@ from app.models.base import _utcnow
 if TYPE_CHECKING:
     from app.models.contest import Contest
     from app.models.problem import Problem
-    from app.models.submission_result import SubmissionResult
     from app.models.user import User
 
 
@@ -135,9 +134,4 @@ class Submission(Base):
     )
     contest: Mapped[Optional["Contest"]] = relationship(
         back_populates="submissions",
-    )
-    submission_results: Mapped[list["SubmissionResult"]] = relationship(
-        back_populates="submission",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
     )
