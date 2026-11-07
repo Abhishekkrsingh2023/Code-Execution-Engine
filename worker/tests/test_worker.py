@@ -8,9 +8,19 @@ try:
     from worker.config import WorkerSettings
     from worker.config import settings as worker_settings
     from worker.container import DockerContainerEngine
-    from worker.models import Problem, Submission, SubmissionStatus, User
+    from worker.models import (
+        Contest,
+        ContestParticipant,
+        ContestProblem,
+        ContestStatus,
+        Problem,
+        Submission,
+        SubmissionStatus,
+        User,
+    )
     from worker.services import (
         map_job_status_to_submission_status,
+        recalculate_contest_participant_stats,
         record_submission_completion,
         resolve_problem_id,
         update_user_leaderboard_score,
@@ -20,9 +30,19 @@ except (ImportError, ModuleNotFoundError):
     from config import WorkerSettings
     from config import settings as worker_settings
     from container import DockerContainerEngine
-    from models import Problem, Submission, SubmissionStatus, User
+    from models import (
+        Contest,
+        ContestParticipant,
+        ContestProblem,
+        ContestStatus,
+        Problem,
+        Submission,
+        SubmissionStatus,
+        User,
+    )
     from services import (
         map_job_status_to_submission_status,
+        recalculate_contest_participant_stats,
         record_submission_completion,
         resolve_problem_id,
         update_user_leaderboard_score,
@@ -44,6 +64,9 @@ def sync_db() -> Session:
         session.rollback()
         # Cleanup
         session.query(Submission).delete()
+        session.query(ContestParticipant).delete()
+        session.query(ContestProblem).delete()
+        session.query(Contest).delete()
         session.query(Problem).delete()
         session.query(User).delete()
         session.commit()
@@ -280,3 +303,85 @@ def test_java_compilation_and_execution_command_flags():
     assert "-XX:+UseSerialGC" in exec_cmd
     assert "-Xms16m" in exec_cmd
     assert "-Xmx128m" in exec_cmd
+
+
+def test_record_submission_completion_contest_sync(sync_db: Session):
+    from datetime import UTC, datetime, timedelta
+
+    # 1. Create a user
+    user = User(
+        id=uuid.uuid4(),
+        username=f"contest_user_{uuid.uuid4().hex[:6]}",
+        email=f"cu_{uuid.uuid4().hex[:6]}@example.com",
+        password_hash="pw",
+    )
+    sync_db.add(user)
+    sync_db.commit()
+
+    # 2. Create a problem
+    prob = Problem(
+        title=f"Contest Problem {uuid.uuid4().hex[:6]}",
+        description="Desc",
+        time_limit=1.0,
+        memory_limit=128,
+    )
+    sync_db.add(prob)
+    sync_db.commit()
+    sync_db.refresh(prob)
+
+    # 3. Create a contest
+    now = datetime.now(UTC)
+    contest = Contest(
+        id=uuid.uuid4(),
+        title="Weekly Challenge",
+        start_time=now - timedelta(hours=1),
+        end_time=now + timedelta(hours=2),
+        status=ContestStatus.ACTIVE,
+        penalty_minutes=20,
+    )
+    sync_db.add(contest)
+    sync_db.commit()
+
+    # 4. Assign problem to contest and register participant
+    cp = ContestProblem(
+        contest_id=contest.id,
+        problem_id=prob.id,
+        order_index=1,
+        points=100.0,
+    )
+    part = ContestParticipant(
+        contest_id=contest.id,
+        user_id=user.id,
+        score=0.0,
+        problems_solved=0,
+        penalty_seconds=0,
+    )
+    sync_db.add_all([cp, part])
+    sync_db.commit()
+
+    # 5. Record submission completion for a contest submission
+    sub_id = uuid.uuid4()
+    result_data = {
+        "status": "completed",
+        "score": 5.0,
+        "max_score": 5.0,
+        "tests_passed": 5,
+        "total_tests": 5,
+        "time_taken": 0.12,
+        "user_id": str(user.id),
+        "problem_id": prob.id,
+        "contest_id": str(contest.id),
+        "language": "python",
+        "user_code": "print('hello')",
+    }
+
+    res = record_submission_completion(sub_id, result_data, db=sync_db)
+    assert res["status"] == "accepted"
+    assert res["score"] == 5.0
+
+    # 6. Verify contest participant stats were recalculated and persisted
+    sync_db.refresh(part)
+    assert part.score == 100.0
+    assert part.problems_solved == 1
+    assert part.penalty_seconds >= 0
+

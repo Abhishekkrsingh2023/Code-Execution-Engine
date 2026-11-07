@@ -7,13 +7,31 @@ from sqlalchemy.orm import Session
 
 try:
     from worker.database import SessionLocal
-    from worker.models import Problem, Submission, SubmissionLanguage, SubmissionStatus, User
+    from worker.models import (
+        Contest,
+        ContestParticipant,
+        ContestProblem,
+        Problem,
+        Submission,
+        SubmissionLanguage,
+        SubmissionStatus,
+        User,
+    )
 except ImportError:
     # pyrefly: ignore[missing-import]
     from database import SessionLocal
 
     # pyrefly: ignore[missing-import]
-    from models import Problem, Submission, SubmissionLanguage, SubmissionStatus, User
+    from models import (
+        Contest,
+        ContestParticipant,
+        ContestProblem,
+        Problem,
+        Submission,
+        SubmissionLanguage,
+        SubmissionStatus,
+        User,
+    )
 
 
 def resolve_problem_id(problem_id_val: int | str | None, db: Session) -> int | None:
@@ -156,6 +174,99 @@ def record_submission_completion(
         return _record_submission_in_session(sub_uuid, result_data, session)
 
 
+def recalculate_contest_participant_stats(
+    contest_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+) -> tuple[float, int, int]:
+    """Calculates and updates a participant's score, problems solved, and penalty seconds in a contest."""
+    stmt_contest = select(Contest).where(Contest.id == contest_id)
+    contest = db.execute(stmt_contest).scalar_one_or_none()
+    if not contest:
+        return 0.0, 0, 0
+
+    stmt_part = select(ContestParticipant).where(
+        ContestParticipant.contest_id == contest_id,
+        ContestParticipant.user_id == user_id,
+    )
+    participant = db.execute(stmt_part).scalar_one_or_none()
+    if not participant:
+        return 0.0, 0, 0
+
+    stmt_probs = select(ContestProblem).where(ContestProblem.contest_id == contest_id)
+    contest_problems = db.execute(stmt_probs).scalars().all()
+    problem_points_map = {cp.problem_id: cp.points for cp in contest_problems}
+
+    stmt_subs = (
+        select(Submission)
+        .where(
+            Submission.contest_id == contest_id,
+            Submission.user_id == user_id,
+            Submission.created_at >= contest.start_time,
+            Submission.created_at <= contest.end_time,
+        )
+        .order_by(Submission.created_at.asc())
+    )
+    submissions = db.execute(stmt_subs).scalars().all()
+
+    problem_subs: dict[int, list[Submission]] = {}
+    for sub in submissions:
+        if sub.problem_id is not None:
+            problem_subs.setdefault(sub.problem_id, []).append(sub)
+
+    total_score = 0.0
+    problems_solved = 0
+    total_penalty_seconds = 0
+    penalty_per_wrong = contest.penalty_minutes * 60
+
+    for prob_id, allocated_points in problem_points_map.items():
+        subs = problem_subs.get(prob_id, [])
+        is_solved = False
+        wrong_count_before_ac = 0
+        ac_submission: Submission | None = None
+        best_partial_score = 0.0
+
+        for s in subs:
+            if s.status == SubmissionStatus.ACCEPTED:
+                is_solved = True
+                ac_submission = s
+                break
+            else:
+                wrong_count_before_ac += 1
+                if s.max_score > 0 and s.score > 0:
+                    ratio = min(1.0, s.score / s.max_score)
+                    best_partial_score = max(best_partial_score, ratio * allocated_points)
+
+        if is_solved and ac_submission is not None:
+            problems_solved += 1
+            total_score += allocated_points
+            time_to_solve = max(
+                0, int((ac_submission.created_at - contest.start_time).total_seconds())
+            )
+            prob_penalty = time_to_solve + (wrong_count_before_ac * penalty_per_wrong)
+            total_penalty_seconds += prob_penalty
+        else:
+            total_score += best_partial_score
+
+    total_score = round(total_score, 2)
+    participant.score = total_score
+    participant.problems_solved = problems_solved
+    participant.penalty_seconds = total_penalty_seconds
+
+    db.commit()
+    db.refresh(participant)
+
+    logger.info(
+        "Updated contest participant #{} (contest={}): score={}, solved={}, penalty={}s",
+        user_id,
+        contest_id,
+        total_score,
+        problems_solved,
+        total_penalty_seconds,
+    )
+    return total_score, problems_solved, total_penalty_seconds
+
+
 def _record_submission_in_session(
     sub_uuid: uuid.UUID,
     result_data: dict[str, Any],
@@ -181,6 +292,11 @@ def _record_submission_in_session(
         submission.tests_passed = tests_passed
         submission.total_tests = total_tests
         submission.execution_time = time_taken
+        if not submission.contest_id and result_data.get("contest_id"):
+            try:
+                submission.contest_id = uuid.UUID(str(result_data["contest_id"]))
+            except ValueError:
+                pass
         user_id = submission.user_id
     else:
         # If Submission record wasn't created at enqueue time, create it now if user_id is provided
@@ -195,6 +311,13 @@ def _record_submission_in_session(
             except ValueError:
                 user_id = None
 
+        contest_id_val = None
+        if result_data.get("contest_id"):
+            try:
+                contest_id_val = uuid.UUID(str(result_data["contest_id"]))
+            except ValueError:
+                contest_id_val = None
+
         lang_str = str(result_data.get("language", "python")).lower()
         try:
             sub_lang = SubmissionLanguage(lang_str)
@@ -205,6 +328,7 @@ def _record_submission_in_session(
             id=sub_uuid,
             user_id=user_id,
             problem_id=problem_id_val,
+            contest_id=contest_id_val,
             problem_name=str(result_data.get("problem_name", "Submission")),
             language=sub_lang,
             source_code=str(result_data.get("user_code", "")),
@@ -224,6 +348,13 @@ def _record_submission_in_session(
     updated_solved = None
     if user_id:
         updated_score, updated_solved = update_user_leaderboard_score(user_id, db)
+        if submission.contest_id:
+            try:
+                recalculate_contest_participant_stats(submission.contest_id, user_id, db)
+            except Exception as c_exc:
+                logger.warning(
+                    "Failed to recalculate contest stats for submission {}: {}", sub_uuid, c_exc
+                )
 
     return {
         "submission_id": str(sub_uuid),

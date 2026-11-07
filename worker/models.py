@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -14,6 +24,170 @@ def _utcnow() -> datetime:
 
 class Base(DeclarativeBase):
     pass
+
+
+class ContestStatus(str, enum.Enum):
+    DRAFT = "draft"
+    UPCOMING = "upcoming"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class Contest(Base):
+    __tablename__ = "contests"
+    __table_args__ = (
+        CheckConstraint("end_time > start_time", name="check_contest_end_after_start"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    start_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    end_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[ContestStatus] = mapped_column(
+        SAEnum(
+            ContestStatus,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        default=ContestStatus.UPCOMING,
+        nullable=False,
+        index=True,
+    )
+    penalty_minutes: Mapped[int] = mapped_column(
+        Integer,
+        default=20,
+        nullable=False,
+        comment="Penalty in minutes added for each incorrect submission prior to solving",
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_utcnow,
+        onupdate=_utcnow,
+        nullable=False,
+    )
+
+
+class ContestProblem(Base):
+    __tablename__ = "contest_problems"
+    __table_args__ = (
+        UniqueConstraint("contest_id", "problem_id", name="uq_contest_problem"),
+        CheckConstraint("points > 0", name="check_positive_contest_problem_points"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    contest_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("contests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    problem_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("problems.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    order_index: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    points: Mapped[float] = mapped_column(
+        Float,
+        default=100.0,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_utcnow,
+        nullable=False,
+    )
+
+
+class ContestParticipant(Base):
+    __tablename__ = "contest_participants"
+    __table_args__ = (
+        UniqueConstraint("contest_id", "user_id", name="uq_contest_participant"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    contest_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("contests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_utcnow,
+        nullable=False,
+    )
+    score: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False,
+        index=True,
+    )
+    problems_solved: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    penalty_seconds: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    rank: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
 
 
 class SubmissionLanguage(str, enum.Enum):
