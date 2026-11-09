@@ -16,7 +16,7 @@ from app.controllers.problem_controller import (
     handle_update_problem_status,
 )
 from app.database import get_db
-from app.dependencies import require_moderator_or_admin
+from app.dependencies import CurrentUserOptionalDep, require_moderator_or_admin
 from app.models.problem import ProblemDifficulty, ProblemStatus
 from app.models.user import User
 from app.schemas.problem import (
@@ -80,6 +80,7 @@ async def list_problems(
     search: str | None = Query(
         default=None, description="Search term across title, description, and topic."
     ),
+    current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> ProblemListResponse:
     """Lists problems with filtering by difficulty, category, topic, status, or search query."""
@@ -92,6 +93,7 @@ async def list_problems(
         problem_status=problem_status,
         search=search,
         db=db,
+        current_user=current_user,
     )
 
 
@@ -172,10 +174,11 @@ async def create_or_update_common_template(
 )
 async def get_problem(
     problem_id: int,
+    current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> ProblemResponse:
     """Retrieves single problem details by ID."""
-    return await handle_get_problem(problem_id=problem_id, db=db)
+    return await handle_get_problem(problem_id=problem_id, db=db, current_user=current_user)
 
 
 @router.get(
@@ -186,10 +189,11 @@ async def get_problem(
 )
 async def get_full_problem(
     problem_id: int,
+    current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> FullProblemResponse:
     """Retrieves complete problem definition including run test cases and templates."""
-    return await handle_get_full_problem(problem_id=problem_id, db=db)
+    return await handle_get_full_problem(problem_id=problem_id, db=db, current_user=current_user)
 
 
 @router.get(
@@ -200,10 +204,13 @@ async def get_full_problem(
 )
 async def get_problem_test_cases(
     problem_id: int,
+    current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[TestCaseResponse]:
     """Retrieves test cases associated with a problem."""
-    return await handle_get_problem_test_cases(problem_id=problem_id, db=db)
+    return await handle_get_problem_test_cases(
+        problem_id=problem_id, db=db, current_user=current_user
+    )
 
 
 @router.patch(

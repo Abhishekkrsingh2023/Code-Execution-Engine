@@ -175,7 +175,7 @@ def record_submission_completion(
 
 
 def recalculate_contest_participant_stats(
-    contest_id: uuid.UUID,
+    contest_id: int,
     user_id: uuid.UUID,
     db: Session,
 ) -> tuple[float, int, int]:
@@ -294,8 +294,8 @@ def _record_submission_in_session(
         submission.execution_time = time_taken
         if not submission.contest_id and result_data.get("contest_id"):
             try:
-                submission.contest_id = uuid.UUID(str(result_data["contest_id"]))
-            except ValueError:
+                submission.contest_id = int(str(result_data["contest_id"]).strip())
+            except (ValueError, TypeError):
                 pass
         user_id = submission.user_id
     else:
@@ -314,8 +314,8 @@ def _record_submission_in_session(
         contest_id_val = None
         if result_data.get("contest_id"):
             try:
-                contest_id_val = uuid.UUID(str(result_data["contest_id"]))
-            except ValueError:
+                contest_id_val = int(str(result_data["contest_id"]).strip())
+            except (ValueError, TypeError):
                 contest_id_val = None
 
         lang_str = str(result_data.get("language", "python")).lower()

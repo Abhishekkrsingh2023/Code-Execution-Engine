@@ -9,6 +9,7 @@ import {
   FileText,
   BarChart3,
   Terminal,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types/user";
@@ -30,6 +31,11 @@ const NAV_ITEMS: NavItem[] = [
     label: "Problems",
     href: "/problems",
     icon: Code2,
+  },
+  {
+    label: "Contests",
+    href: "/contests",
+    icon: Trophy,
   },
   {
     label: "User Directory",

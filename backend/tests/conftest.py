@@ -51,7 +51,20 @@ def setup_test_database() -> Generator[None]:
 
     async def _init() -> None:
         async with test_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "DROP TABLE IF EXISTS contest_problems, contest_participants, contests CASCADE;"
+                )
+            )
+            await conn.execute(
+                text("ALTER TABLE submissions DROP COLUMN IF EXISTS contest_id CASCADE;")
+            )
             await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(
+                text(
+                    "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS contest_id INTEGER REFERENCES contests(id) ON DELETE CASCADE;"
+                )
+            )
             await conn.execute(
                 text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(100);")
             )
@@ -71,11 +84,20 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
     Truncates/deletes all rows from all tables after each test to guarantee complete isolation.
     """
     async with TestingSessionLocal() as session:
-        yield session
-        # Cleanup: delete rows from all tables in reverse dependency order
-        for table in reversed(Base.metadata.sorted_tables):
-            await session.execute(table.delete())
-        await session.commit()
+        try:
+            yield session
+        finally:
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+            async with test_engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "TRUNCATE TABLE users, problems, problem_templates, common_problem_templates, "
+                        "test_cases, contests, contest_problems, contest_participants, submissions, audit_logs CASCADE;"
+                    )
+                )
 
 
 @pytest_asyncio.fixture

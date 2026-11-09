@@ -2,8 +2,6 @@
 Contains the applications needed configurations and settings
 """
 
-
-
 import pathlib
 import warnings
 

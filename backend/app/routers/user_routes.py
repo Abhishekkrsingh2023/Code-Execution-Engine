@@ -194,7 +194,9 @@ async def update_current_user_profile(
 async def list_my_submissions(
     current_user: CurrentUserDep,
     skip: Annotated[int, Query(ge=0, description="Number of submissions to skip")] = 0,
-    limit: Annotated[int, Query(ge=1, le=100, description="Max number of submissions to return")] = 20,
+    limit: Annotated[
+        int, Query(ge=1, le=100, description="Max number of submissions to return")
+    ] = 20,
     problem_id: Annotated[int | None, Query(description="Filter submissions by problem ID")] = None,
     status: Annotated[str | None, Query(description="Filter submissions by verdict/status")] = None,
     db: AsyncSession = Depends(get_db),
@@ -233,7 +235,6 @@ async def get_my_submission_detail(
         current_user=current_user,
         db=db,
     )
-
 
 
 @router.post(

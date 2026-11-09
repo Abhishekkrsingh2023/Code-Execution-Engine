@@ -580,6 +580,38 @@ curl -X POST "http://localhost:8000/api-v1/users/otp/verify" \
 ```
 
 
+### Contest Management & Arena (ICPC-Style)
+
+The platform includes a timed competition subsystem supporting ICPC scoring rules:
+
+- **Contest Lifecycle**: Status (`upcoming`, `live`, `ended`) is strictly derived on the server from UTC timestamps (`start_time`, `end_time`) and the server clock.
+- **Rule 1: ICPC Ranking**: Sorted by solved count descending, then penalty time ascending. Equal solved count and penalty share rank (e.g., 1, 1, 3). Display tie-breaker: earlier timestamp of last accepted submission (`last_accepted_at`).
+- **Rule 2: Penalty**: Default 20 minutes per incorrect verdict before the first AC on that problem. Compile errors and system errors add 0 penalty. Only `submit` actions assess penalties (test `run` never does).
+- **Rule 4: Registration**: Any verified user can register until `end_time`. Unregistration is permitted only before `start_time`.
+- **Rule 5: Problem Privacy**: Contest problems are hidden from public problem listings, practice detail (404), and normal run/submit endpoints until the contest ends.
+- **Rule 7: Modification Locks**: Before `start_time`, all parameters and problem orders can be edited. While live, only `title` and `description` are editable (schedule, penalty, and problem list locked). Deletion is permitted only for upcoming contests.
+- **Rule 10: Permissions**: Admins and Moderators can create and edit contests. Only Admins can delete upcoming contests.
+- **Rule 11: Arena Execution**: Registered users can run test cases and submit solutions in real time in the full-screen arena (`100dvh`).
+
+#### Supported Developer Commands
+- **Backend (Python)**:
+  ```bash
+  uv sync
+  uv run ruff format --check .
+  uv run ruff check .
+  uv run mypy app
+  uv run pytest
+  uv run alembic upgrade head
+  ```
+- **Frontends (`admin/` & `web/`)**:
+  ```bash
+  bun install
+  bun run typecheck
+  bun run lint
+  bun run test
+  bun run build
+  ```
+
 ---
 
 ## 🔒 Security & Sandboxing Features

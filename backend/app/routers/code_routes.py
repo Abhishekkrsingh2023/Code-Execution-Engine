@@ -141,3 +141,10 @@ async def get_my_code_submission(
         db=db,
     )
 
+
+@router.get("/languages", summary="Get platform supported programming languages")
+async def get_supported_languages() -> list[str]:
+    """Returns platform supported execution languages (source of truth)."""
+    from app.models.submission import SubmissionLanguage
+
+    return [lang.value for lang in SubmissionLanguage]

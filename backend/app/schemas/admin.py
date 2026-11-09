@@ -225,12 +225,8 @@ class SubmissionStatsResponse(BaseModel):
     compilation_errors: int = Field(description="Count of compilation error submissions.")
     runtime_errors: int = Field(description="Count of runtime error submissions.")
     time_limit_exceeded: int = Field(description="Count of time limit exceeded submissions.")
-    memory_limit_exceeded: int = Field(
-        description="Count of memory limit exceeded submissions."
-    )
-    success_rate: float = Field(
-        description="Submission success rate percentage (0.0 to 100.0)."
-    )
+    memory_limit_exceeded: int = Field(description="Count of memory limit exceeded submissions.")
+    success_rate: float = Field(description="Submission success rate percentage (0.0 to 100.0).")
     submissions_trend: list[TimeSeriesPoint] = Field(
         default_factory=list, description="Daily submissions trend."
     )

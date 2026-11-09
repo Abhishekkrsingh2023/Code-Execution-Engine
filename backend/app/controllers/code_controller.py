@@ -112,6 +112,30 @@ async def handle_code_execution_request(
 ) -> dict[str, Any]:
     submission.mode = ExecutionMode(mode)
 
+    # Enforce Rule 5: A problem in any contest that has not ended is hidden from normal run/submit endpoints for non-staff
+    is_staff = current_user is not None and current_user.role in ("admin", "moderator")
+    if not is_staff and submission.contest_id is None and db is not None:
+        from sqlalchemy import func
+
+        from app.models.contest import Contest, ContestProblem
+
+        resolved_pid = await resolve_problem_id(submission.problem_id, db)
+        if resolved_pid:
+            stmt_unended = (
+                select(func.count())
+                .select_from(ContestProblem)
+                .join(Contest, ContestProblem.contest_id == Contest.id)
+                .where(
+                    ContestProblem.problem_id == resolved_pid,
+                    Contest.end_time > func.now(),
+                )
+            )
+            if (await db.execute(stmt_unended)).scalar_one() > 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Problem '{submission.problem_id}' not found.",
+                )
+
     # 1. Resolve test cases based on mode
     if mode == "submit":
         internal_cases, prob_time_limit, resolved_name = await load_problem_test_cases(
@@ -248,12 +272,15 @@ async def handle_submit_code_request(
     submission: SubmissionRequest,
     current_user: User | None = None,
     db: AsyncSession | None = None,
+    contest_id: int | None = None,
 ) -> dict[str, Any]:
     """Entry point for the /submit endpoint.
 
     Always forces mode='submit' regardless of what the incoming schema says,
     preventing clients from bypassing leaderboard updates by injecting mode='run'.
     """
+    if contest_id is not None:
+        submission.contest_id = contest_id
     return await handle_code_execution_request(
         submission=submission,
         mode="submit",  # hardcoded — never trust client-supplied mode on submit endpoint
@@ -266,7 +293,10 @@ async def handle_run_code_request(
     submission: SubmissionRequest,
     current_user: User | None = None,
     db: AsyncSession | None = None,
+    contest_id: int | None = None,
 ) -> dict[str, Any]:
+    if contest_id is not None:
+        submission.contest_id = contest_id
     return await handle_code_execution_request(
         submission=submission,
         mode="run",
@@ -283,14 +313,19 @@ async def handle_stream_submission(submission_id: uuid.UUID) -> StreamingRespons
         try:
             saved = await redis_client.get(channel)  # 2. then check stored result
             if saved:
-                yield f"event: result\ndata: {saved}\n\n"
+                saved_text = saved.decode("utf-8") if isinstance(saved, bytes) else str(saved)
+                yield f"event: result\ndata: {saved_text}\n\n"
                 return
             while True:  # 3. then wait for publish
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15)
                 if msg is None or msg.get("type") != "message":
                     yield ": keepalive\n\n"
                     continue
-                yield f"event: result\ndata: {msg['data']}\n\n"
+                msg_data = msg["data"]
+                msg_text = (
+                    msg_data.decode("utf-8") if isinstance(msg_data, bytes) else str(msg_data)
+                )
+                yield f"event: result\ndata: {msg_text}\n\n"
                 return  # 4. close after result
         finally:
             try:
@@ -317,10 +352,17 @@ async def handle_poll_submission(
     db: AsyncSession | None = None,
 ) -> dict[str, Any]:
     submission_key = f"{settings.REDIS_SUBMISSION_KEY_PREFIX}{submission_id}"
-    submission_data = await redis_client.hgetall(submission_key)
+    raw_data = await redis_client.hgetall(submission_key)
 
-    if not submission_data:
+    if not raw_data:
         raise HTTPException(status_code=404, detail="Submission not found.")
+
+    submission_data: dict[str, Any] = {
+        (k.decode("utf-8") if isinstance(k, bytes) else str(k)): (
+            v.decode("utf-8") if isinstance(v, bytes) else v
+        )
+        for k, v in raw_data.items()
+    }
 
     mode = submission_data.get("mode", "submit")
 

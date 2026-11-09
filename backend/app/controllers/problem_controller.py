@@ -7,7 +7,7 @@ from app.models.base import _utcnow
 from app.models.problem import Problem, ProblemDifficulty, ProblemStatus
 from app.models.problem_template import CommonProblemTemplate, ProblemTemplate
 from app.models.test_case import TestCase
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.problem import (
     CommonProblemTemplateCreateRequest,
     CommonProblemTemplateResponse,
@@ -107,9 +107,27 @@ async def handle_create_problem(
         ) from exc
 
 
-async def _get_active_problem_or_404(problem_id: int, db: AsyncSession) -> Problem:
-    """Retrieves an active (non-deleted) problem by ID or raises 404."""
+def _is_staff(user: User | None) -> bool:
+    return user is not None and user.role in (UserRole.ADMIN, UserRole.MODERATOR)
+
+
+async def _get_active_problem_or_404(
+    problem_id: int, db: AsyncSession, current_user: User | None = None
+) -> Problem:
+    """Retrieves an active (non-deleted) problem by ID or raises 404.
+    Rule 5: problems in an unended contest are hidden (404) for non-staff.
+    """
     stmt = select(Problem).where(Problem.id == problem_id, Problem.is_deleted.is_(False))
+    if not _is_staff(current_user):
+        from app.models.contest import Contest, ContestProblem
+
+        unended_subq = (
+            select(ContestProblem.problem_id)
+            .join(Contest, ContestProblem.contest_id == Contest.id)
+            .where(Contest.end_time > func.now())
+        )
+        stmt = stmt.where(Problem.id.not_in(unended_subq))
+
     result = await db.execute(stmt)
     problem = result.scalar_one_or_none()
     if problem is None:
@@ -461,8 +479,11 @@ async def handle_list_problems(
     problem_status: ProblemStatus | None,
     search: str | None,
     db: AsyncSession,
+    current_user: User | None = None,
 ) -> ProblemListResponse:
-    """Retrieves paginated list of non-deleted problems with filters."""
+    """Retrieves paginated list of non-deleted problems with filters.
+    Rule 5: problems in an unended contest are hidden for non-staff.
+    """
     count_stmt = select(func.count(Problem.id)).where(Problem.is_deleted.is_(False))
     query_stmt = (
         select(Problem)
@@ -471,6 +492,17 @@ async def handle_list_problems(
         .offset(skip)
         .limit(limit)
     )
+
+    if not _is_staff(current_user):
+        from app.models.contest import Contest, ContestProblem
+
+        unended_subq = (
+            select(ContestProblem.problem_id)
+            .join(Contest, ContestProblem.contest_id == Contest.id)
+            .where(Contest.end_time > func.now())
+        )
+        count_stmt = count_stmt.where(Problem.id.not_in(unended_subq))
+        query_stmt = query_stmt.where(Problem.id.not_in(unended_subq))
 
     if difficulty is not None:
         count_stmt = count_stmt.where(Problem.difficulty == difficulty)
@@ -514,9 +546,10 @@ async def handle_list_problems(
 async def handle_get_problem(
     problem_id: int,
     db: AsyncSession,
+    current_user: User | None = None,
 ) -> ProblemResponse:
     """Retrieves single problem by ID."""
-    problem = await _get_active_problem_or_404(problem_id, db)
+    problem = await _get_active_problem_or_404(problem_id, db, current_user=current_user)
 
     return ProblemResponse.model_validate(problem)
 
@@ -686,9 +719,10 @@ async def handle_create_full_problem(
 async def handle_get_full_problem(
     problem_id: int,
     db: AsyncSession,
+    current_user: User | None = None,
 ) -> FullProblemResponse:
     """Retrieves problem along with its test cases and associated templates."""
-    problem = await _get_active_problem_or_404(problem_id, db)
+    problem = await _get_active_problem_or_404(problem_id, db, current_user=current_user)
 
     code_id = problem.id
     stmt_common = (
@@ -810,8 +844,10 @@ async def handle_create_or_update_common_template(
 async def handle_get_problem_test_cases(
     problem_id: int,
     db: AsyncSession,
+    current_user: User | None = None,
 ) -> list[TestCaseResponse]:
     """Retrieves test cases associated with a problem."""
+    await _get_active_problem_or_404(problem_id, db, current_user=current_user)
     stmt = select(TestCase).where(TestCase.problem_id == problem_id).order_by(TestCase.id)
     cases = (await db.execute(stmt)).scalars().all()
     return [TestCaseResponse.model_validate(c) for c in cases]

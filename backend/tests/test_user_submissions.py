@@ -24,7 +24,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -472,4 +471,3 @@ class TestCodeSubmissionsAliasRoutes:
         data = response.json()
         assert data["id"] == str(submission.id)
         assert data["source_code"] == "alias detail code"
-

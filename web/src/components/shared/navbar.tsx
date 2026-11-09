@@ -36,6 +36,12 @@ export function Navbar({ user }: NavbarProps) {
             >
               Problems
             </Link>
+            <Link
+              href="/contests"
+              className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              Contests
+            </Link>
           </nav>
         </div>
 

@@ -180,8 +180,9 @@ async def revoke_all_user_refresh_tokens(
     try:
         jtis = await r.smembers(set_key)
         for jti in jtis:
-            await r.set(_revoked_token_key(jti), reason, ex=7 * 86400)
-            await r.delete(_active_token_key(user_id_str, jti))
+            jti_str = jti.decode("utf-8") if isinstance(jti, bytes) else str(jti)
+            await r.set(_revoked_token_key(jti_str), reason, ex=7 * 86400)
+            await r.delete(_active_token_key(user_id_str, jti_str))
         await r.delete(set_key)
         logger.warning(
             "Bulk revoked {} refresh token(s) for user_id={} | reason={}",

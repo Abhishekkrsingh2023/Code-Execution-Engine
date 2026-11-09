@@ -6,48 +6,156 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.contest import Contest, ContestParticipant, ContestProblem, ContestStatus
+from app.models.contest import Contest, ContestParticipant, ContestProblem
 from app.models.submission import Submission, SubmissionStatus
 from app.models.user import User
 
+# Wrong attempt verdicts that incur penalty in ICPC
+# Note: COMPILATION_ERROR and INTERNAL_ERROR add nothing per Rule 2
+PENALTY_VERDICTS = {
+    SubmissionStatus.WRONG_ANSWER,
+    SubmissionStatus.TIME_LIMIT_EXCEEDED,
+    SubmissionStatus.MEMORY_LIMIT_EXCEEDED,
+    SubmissionStatus.RUNTIME_ERROR,
+}
 
-def get_effective_contest_status(contest: Contest, now: datetime | None = None) -> ContestStatus:
-    """Determines real-time contest status taking into account start and end timestamps."""
-    return contest.get_effective_status(now)
+
+def calculate_icpc_participant_score(
+    contest_start_time: datetime,
+    contest_end_time: datetime,
+    penalty_minutes: int,
+    problem_ids: list[int],
+    user_submissions: list[Submission],
+) -> tuple[float, int, int, datetime | None, dict[int, dict[str, Any]]]:
+    """Pure function calculating ICPC score, solved count, penalty time, and last AC timestamp.
+
+    Rules strictly followed:
+    - Only submissions within [start_time, end_time] count.
+    - Submissions evaluated in created_at ascending order.
+    - If problem is solved (at least one ACCEPTED verdict):
+      - Solved count += 1.
+      - Solve time = seconds from contest_start_time to first accepted submission received time (created_at).
+      - Wrong attempts before the first AC add (penalty_minutes * 60) seconds each.
+      - Compile errors and system errors add 0 penalty.
+      - Submissions after the first AC are ignored.
+      - Pending submissions don't count until they have a verdict.
+    - If problem is NOT solved:
+      - Wrong attempts add 0 penalty.
+    """
+    subs_by_problem: dict[int, list[Submission]] = {}
+    for s in user_submissions:
+        if s.problem_id is not None and s.problem_id in problem_ids:
+            # Submissions must fall inside the contest window
+            if contest_start_time <= s.created_at <= contest_end_time:
+                subs_by_problem.setdefault(s.problem_id, []).append(s)
+
+    problems_solved = 0
+    total_penalty_seconds = 0
+    total_score = 0.0
+    last_accepted_at: datetime | None = None
+    problem_stats: dict[int, dict[str, Any]] = {}
+
+    for prob_id in problem_ids:
+        p_subs = subs_by_problem.get(prob_id, [])
+        p_subs.sort(key=lambda x: x.created_at)
+
+        is_solved = False
+        wrong_count_before_ac = 0
+        first_ac_sub: Submission | None = None
+
+        for sub in p_subs:
+            # Pending submissions are ignored until they have a verdict
+            if sub.status in (
+                SubmissionStatus.PENDING,
+                SubmissionStatus.QUEUED,
+                SubmissionStatus.RUNNING,
+            ):
+                continue
+
+            if sub.status == SubmissionStatus.ACCEPTED:
+                is_solved = True
+                first_ac_sub = sub
+                break
+            elif sub.status in PENALTY_VERDICTS:
+                wrong_count_before_ac += 1
+            # Note: COMPILATION_ERROR and INTERNAL_ERROR add nothing
+
+        if is_solved and first_ac_sub is not None:
+            problems_solved += 1
+            total_score += 100.0  # Or 1 solve point
+            solve_time = max(0, int((first_ac_sub.created_at - contest_start_time).total_seconds()))
+            prob_penalty = solve_time + (wrong_count_before_ac * penalty_minutes * 60)
+            total_penalty_seconds += prob_penalty
+
+            if last_accepted_at is None or first_ac_sub.created_at > last_accepted_at:
+                last_accepted_at = first_ac_sub.created_at
+
+            problem_stats[prob_id] = {
+                "problem_id": prob_id,
+                "is_solved": True,
+                "score": 100.0,
+                "attempts": wrong_count_before_ac + 1,
+                "solved_time_seconds": solve_time,
+                "penalty_seconds": prob_penalty,
+            }
+        else:
+            # Not solved: wrong attempts do not add penalty
+            problem_stats[prob_id] = {
+                "problem_id": prob_id,
+                "is_solved": False,
+                "score": 0.0,
+                "attempts": wrong_count_before_ac,
+                "solved_time_seconds": None,
+                "penalty_seconds": 0,
+            }
+
+    return total_score, problems_solved, total_penalty_seconds, last_accepted_at, problem_stats
 
 
-async def sync_contest_status(
-    contest: Contest, db: AsyncSession, now: datetime | None = None
-) -> ContestStatus:
-    """Evaluates and persists the effective status to the database if it has transitioned."""
-    effective = contest.get_effective_status(now)
-    if contest.status not in (ContestStatus.DRAFT, ContestStatus.CANCELLED):
-        if contest.status != effective:
-            contest.status = effective
-            await db.commit()
-            await db.refresh(contest)
-            logger.info("Contest #{} status transitioned to {}", contest.id, effective.value)
-    return effective
+def rank_icpc_participants(
+    participant_data: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Assigns ranks according to ICPC rules:
+    - Primary sort: problems_solved desc
+    - Secondary sort: penalty_seconds asc
+    - Tie display sort: last_accepted_at asc (earlier last AC wins), then registered_at asc
+    - Equal solved and penalty share the same rank (e.g. 1, 1, 3).
+    """
+
+    def sort_key(p: dict[str, Any]) -> tuple[int, int, float, float]:
+        solved = p["problems_solved"]
+        penalty = p["penalty_seconds"]
+        last_ac = p.get("last_accepted_at")
+        last_ac_ts = last_ac.timestamp() if isinstance(last_ac, datetime) else float("inf")
+        reg_at = p.get("registered_at")
+        reg_ts = reg_at.timestamp() if isinstance(reg_at, datetime) else 0.0
+        # For sorting: -solved (descending), penalty (ascending), last_ac_ts (ascending), reg_ts (ascending)
+        return (-solved, penalty, last_ac_ts, reg_ts)
+
+    sorted_participants = sorted(participant_data, key=sort_key)
+
+    for i, p in enumerate(sorted_participants):
+        if i > 0:
+            prev = sorted_participants[i - 1]
+            if (
+                p["problems_solved"] == prev["problems_solved"]
+                and p["penalty_seconds"] == prev["penalty_seconds"]
+            ):
+                p["rank"] = prev["rank"]
+            else:
+                p["rank"] = i + 1
+        else:
+            p["rank"] = 1
+
+    return sorted_participants
 
 
 async def recalculate_contest_participant_stats(
-    contest_id: uuid.UUID,
+    contest_id: int,
     user_id: uuid.UUID,
     db: AsyncSession,
 ) -> tuple[float, int, int]:
-    """Calculates and updates a participant's score, problems solved, and penalty seconds in a contest.
-
-    Scoring and Tie-Breaking Rules:
-    1. For each assigned contest problem, evaluate all submissions made by this user in this contest.
-    2. Submissions must fall between contest start_time and end_time.
-    3. If solved (ACCEPTED):
-       - User receives full problem points.
-       - Time taken = seconds from contest start_time to first accepted submission.
-       - Wrong submissions before the first AC add penalty time (penalty_minutes * 60 seconds each).
-    4. If not solved:
-       - Best partial score ratio is awarded (if any), but wrong attempts do NOT assess penalty time.
-    5. Returns (total_score, problems_solved, total_penalty_seconds).
-    """
+    """Calculates and updates participant stats in database for a contest."""
     stmt_contest = select(Contest).where(Contest.id == contest_id)
     contest = (await db.execute(stmt_contest)).scalar_one_or_none()
     if not contest:
@@ -61,12 +169,9 @@ async def recalculate_contest_participant_stats(
     if not participant:
         return 0.0, 0, 0
 
-    # Fetch assigned problems and their points
-    stmt_probs = select(ContestProblem).where(ContestProblem.contest_id == contest_id)
-    contest_problems = (await db.execute(stmt_probs)).scalars().all()
-    problem_points_map = {cp.problem_id: cp.points for cp in contest_problems}
+    stmt_probs = select(ContestProblem.problem_id).where(ContestProblem.contest_id == contest_id)
+    problem_ids = list((await db.execute(stmt_probs)).scalars().all())
 
-    # Fetch submissions for this contest by this user within contest time window
     stmt_subs = (
         select(Submission)
         .where(
@@ -77,110 +182,60 @@ async def recalculate_contest_participant_stats(
         )
         .order_by(Submission.created_at.asc())
     )
-    submissions = (await db.execute(stmt_subs)).scalars().all()
+    submissions = list((await db.execute(stmt_subs)).scalars().all())
 
-    # Group submissions by problem_id
-    problem_subs: dict[int, list[Submission]] = {}
-    for sub in submissions:
-        if sub.problem_id is not None:
-            problem_subs.setdefault(sub.problem_id, []).append(sub)
+    score, solved, penalty, last_ac, _ = calculate_icpc_participant_score(
+        contest_start_time=contest.start_time,
+        contest_end_time=contest.end_time,
+        penalty_minutes=contest.penalty_minutes,
+        problem_ids=problem_ids,
+        user_submissions=submissions,
+    )
 
-    total_score = 0.0
-    problems_solved = 0
-    total_penalty_seconds = 0
-    penalty_per_wrong = contest.penalty_minutes * 60
-
-    for prob_id, allocated_points in problem_points_map.items():
-        subs = problem_subs.get(prob_id, [])
-        is_solved = False
-        wrong_count_before_ac = 0
-        ac_submission: Submission | None = None
-        best_partial_score = 0.0
-
-        for s in subs:
-            if s.status == SubmissionStatus.ACCEPTED:
-                is_solved = True
-                ac_submission = s
-                break
-            else:
-                wrong_count_before_ac += 1
-                if s.max_score > 0 and s.score > 0:
-                    ratio = min(1.0, s.score / s.max_score)
-                    best_partial_score = max(best_partial_score, ratio * allocated_points)
-
-        if is_solved and ac_submission is not None:
-            problems_solved += 1
-            total_score += allocated_points
-            time_to_solve = max(
-                0, int((ac_submission.created_at - contest.start_time).total_seconds())
-            )
-            prob_penalty = time_to_solve + (wrong_count_before_ac * penalty_per_wrong)
-            total_penalty_seconds += prob_penalty
-        else:
-            total_score += best_partial_score
-
-    total_score = round(total_score, 2)
-    participant.score = total_score
-    participant.problems_solved = problems_solved
-    participant.penalty_seconds = total_penalty_seconds
+    participant.score = score
+    participant.problems_solved = solved
+    participant.penalty_seconds = penalty
+    participant.last_accepted_at = last_ac
 
     await db.commit()
     await db.refresh(participant)
 
     logger.info(
-        "Updated contest participant #{} (contest={}): score={}, solved={}, penalty={}s",
+        "Updated contest participant #{} (contest={}): solved={}, penalty={}s, last_ac={}",
         user_id,
         contest_id,
-        total_score,
-        problems_solved,
-        total_penalty_seconds,
+        solved,
+        penalty,
+        last_ac,
     )
-    return total_score, problems_solved, total_penalty_seconds
+    return score, solved, penalty
 
 
 async def get_contest_leaderboard_data(
-    contest_id: uuid.UUID,
+    contest_id: int,
     db: AsyncSession,
     skip: int = 0,
     limit: int = 50,
 ) -> tuple[int, list[dict[str, Any]], dict[str, Any] | None]:
-    """Retrieves paginated leaderboard rankings and winner determination for a contest.
-
-    Ranking Criteria:
-    1. Total score (descending)
-    2. Problems solved (descending)
-    3. Penalty seconds (ascending)
-    4. Registration timestamp (ascending)
-    """
+    """Retrieves paginated leaderboard rankings and winner determination for a contest."""
     stmt_contest = select(Contest).where(Contest.id == contest_id)
     contest = (await db.execute(stmt_contest)).scalar_one_or_none()
     if not contest:
         return 0, [], None
 
-    # Fetch all participants ordered by tie-breaking criteria
+    stmt_probs = select(ContestProblem.problem_id).where(ContestProblem.contest_id == contest_id)
+    problem_ids = list((await db.execute(stmt_probs)).scalars().all())
+
     stmt_parts = (
         select(ContestParticipant, User.username)
         .join(User, ContestParticipant.user_id == User.id)
         .where(ContestParticipant.contest_id == contest_id)
-        .order_by(
-            ContestParticipant.score.desc(),
-            ContestParticipant.problems_solved.desc(),
-            ContestParticipant.penalty_seconds.asc(),
-            ContestParticipant.registered_at.asc(),
-        )
     )
     results = (await db.execute(stmt_parts)).all()
-    total_participants = len(results)
-
-    if total_participants == 0:
+    if not results:
         return 0, [], None
 
-    # Fetch assigned problems
-    stmt_probs = select(ContestProblem).where(ContestProblem.contest_id == contest_id)
-    contest_problems = (await db.execute(stmt_probs)).scalars().all()
-    problem_points_map = {cp.problem_id: cp.points for cp in contest_problems}
-
-    # Fetch all contest submissions to build per-problem breakdown
+    # Fetch all submissions for the contest
     stmt_subs = (
         select(Submission)
         .where(
@@ -191,87 +246,51 @@ async def get_contest_leaderboard_data(
         .order_by(Submission.created_at.asc())
     )
     all_subs = (await db.execute(stmt_subs)).scalars().all()
+    subs_by_user: dict[uuid.UUID, list[Submission]] = {}
+    for s in all_subs:
+        if s.user_id is not None:
+            subs_by_user.setdefault(s.user_id, []).append(s)
 
-    # User -> problem_id -> list of submissions
-    user_problem_subs: dict[uuid.UUID, dict[int, list[Submission]]] = {}
-    for sub in all_subs:
-        if sub.user_id and sub.problem_id:
-            user_problem_subs.setdefault(sub.user_id, {}).setdefault(sub.problem_id, []).append(sub)
-
-    penalty_per_wrong = contest.penalty_minutes * 60
-
-    all_entries: list[dict[str, Any]] = []
-    for rank_idx, (part, username) in enumerate(results, start=1):
-        user_subs_by_prob = user_problem_subs.get(part.user_id, {})
-        problem_breakdown: dict[str, Any] = {}
-
-        for prob_id, points in problem_points_map.items():
-            subs = user_subs_by_prob.get(prob_id, [])
-            is_solved = False
-            wrong_count = 0
-            solved_time_seconds: int | None = None
-            prob_score = 0.0
-
-            for s in subs:
-                if s.status == SubmissionStatus.ACCEPTED:
-                    is_solved = True
-                    prob_score = points
-                    solved_time_seconds = max(
-                        0, int((s.created_at - contest.start_time).total_seconds())
-                    )
-                    break
-                else:
-                    wrong_count += 1
-                    if s.max_score > 0 and s.score > 0:
-                        prob_score = max(prob_score, (s.score / s.max_score) * points)
-
-            problem_breakdown[str(prob_id)] = {
-                "score": round(prob_score, 2),
-                "is_solved": is_solved,
-                "attempts": len(subs),
-                "solved_time_seconds": solved_time_seconds,
-                "penalty_seconds": (
-                    (solved_time_seconds or 0) + (wrong_count * penalty_per_wrong)
-                    if is_solved
-                    else 0
-                ),
+    participant_records: list[dict[str, Any]] = []
+    for part, username in results:
+        user_subs = subs_by_user.get(part.user_id, [])
+        score, solved, penalty, last_ac, p_stats = calculate_icpc_participant_score(
+            contest_start_time=contest.start_time,
+            contest_end_time=contest.end_time,
+            penalty_minutes=contest.penalty_minutes,
+            problem_ids=problem_ids,
+            user_submissions=user_subs,
+        )
+        participant_records.append(
+            {
+                "user_id": str(part.user_id),
+                "username": username,
+                "score": score,
+                "problems_solved": solved,
+                "penalty_seconds": penalty,
+                "last_accepted_at": last_ac,
+                "registered_at": part.registered_at,
+                "problem_scores": {str(k): v for k, v in p_stats.items()},
             }
+        )
 
-        entry = {
-            "rank": rank_idx,
-            "user_id": str(part.user_id),
-            "username": username,
-            "score": part.score,
-            "problems_solved": part.problems_solved,
-            "penalty_seconds": part.penalty_seconds,
-            "problem_scores": problem_breakdown,
-        }
-        all_entries.append(entry)
+    ranked_records = rank_icpc_participants(participant_records)
+    total_count = len(ranked_records)
+    winner = (
+        ranked_records[0] if total_count > 0 and ranked_records[0]["problems_solved"] > 0 else None
+    )
+    paginated_leaderboard = ranked_records[skip : skip + limit]
 
-    # Winner determination:
-    # 1st rank participant if they have at least solved 1 problem or have score > 0
-    winner = None
-    if all_entries:
-        top_entry = all_entries[0]
-        if top_entry["score"] > 0 or top_entry["problems_solved"] > 0:
-            winner = top_entry
-
-    paginated_entries = all_entries[skip : skip + limit]
-    return total_participants, paginated_entries, winner
+    return total_count, paginated_leaderboard, winner
 
 
 async def get_user_contest_rank_data(
-    contest_id: uuid.UUID,
+    contest_id: int,
     user_id: uuid.UUID,
     db: AsyncSession,
 ) -> dict[str, Any] | None:
-    """Calculates specific rank and statistics for a given user in a contest."""
-    _total, leaderboard, _ = await get_contest_leaderboard_data(
-        contest_id=contest_id,
-        db=db,
-        skip=0,
-        limit=100000,  # full list to locate user rank accurately
-    )
+    """Retrieves rank and per-problem breakdown for a specific user in a contest."""
+    _total, leaderboard, _ = await get_contest_leaderboard_data(contest_id, db, skip=0, limit=10000)
     for entry in leaderboard:
         if entry["user_id"] == str(user_id):
             return entry

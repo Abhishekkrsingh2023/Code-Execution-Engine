@@ -40,10 +40,10 @@ class Contest(Base):
         CheckConstraint("end_time > start_time", name="check_contest_end_after_start"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        default=uuid.uuid4,
+        autoincrement=True,
     )
     title: Mapped[str] = mapped_column(
         String(255),
@@ -111,8 +111,8 @@ class ContestProblem(Base):
         primary_key=True,
         autoincrement=True,
     )
-    contest_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    contest_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("contests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -123,9 +123,8 @@ class ContestProblem(Base):
         nullable=False,
         index=True,
     )
-    order_index: Mapped[int] = mapped_column(
+    position: Mapped[int] = mapped_column(
         Integer,
-        default=0,
         nullable=False,
     )
     points: Mapped[float] = mapped_column(
@@ -151,8 +150,8 @@ class ContestParticipant(Base):
         primary_key=True,
         autoincrement=True,
     )
-    contest_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    contest_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("contests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -231,8 +230,8 @@ class Submission(Base):
         index=True,
         nullable=True,
     )
-    contest_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    contest_id: Mapped[int | None] = mapped_column(
+        Integer,
         ForeignKey("contests.id", ondelete="CASCADE"),
         index=True,
         nullable=True,

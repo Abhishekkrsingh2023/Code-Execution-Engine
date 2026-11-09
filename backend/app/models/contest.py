@@ -13,7 +13,6 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,11 +26,9 @@ if TYPE_CHECKING:
 
 
 class ContestStatus(str, enum.Enum):
-    DRAFT = "draft"
     UPCOMING = "upcoming"
-    ACTIVE = "active"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    LIVE = "live"
+    ENDED = "ended"
 
 
 class Contest(Base):
@@ -40,10 +37,10 @@ class Contest(Base):
         CheckConstraint("end_time > start_time", name="check_contest_end_after_start"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        default=uuid.uuid4,
+        autoincrement=True,
     )
     title: Mapped[str] = mapped_column(
         String(255),
@@ -61,16 +58,6 @@ class Contest(Base):
     )
     end_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
-        index=True,
-    )
-    status: Mapped[ContestStatus] = mapped_column(
-        SAEnum(
-            ContestStatus,
-            native_enum=False,
-            values_callable=lambda x: [e.value for e in x],
-        ),
-        default=ContestStatus.UPCOMING,
         nullable=False,
         index=True,
     )
@@ -107,7 +94,7 @@ class Contest(Base):
     contest_problems: Mapped[list["ContestProblem"]] = relationship(
         back_populates="contest",
         cascade="all, delete-orphan",
-        order_by="ContestProblem.order_index",
+        order_by="ContestProblem.position",
         lazy="selectin",
     )
     participants: Mapped[list["ContestParticipant"]] = relationship(
@@ -126,28 +113,23 @@ class Contest(Base):
         return int((self.end_time - self.start_time).total_seconds())
 
     def get_effective_status(self, now: datetime | None = None) -> ContestStatus:
-        """Determines the real-time lifecycle status of the contest.
-
-        If the contest was explicitly marked as DRAFT or CANCELLED, that state is preserved.
-        Otherwise, the status dynamically evaluates based on the current UTC time.
-        """
-        if self.status in (ContestStatus.DRAFT, ContestStatus.CANCELLED):
-            return self.status
-
+        """Determines the real-time lifecycle status of the contest derived strictly from start and end times and server clock."""
         current_time = now or datetime.now(UTC)
         if current_time < self.start_time:
             return ContestStatus.UPCOMING
         elif current_time > self.end_time:
-            return ContestStatus.COMPLETED
+            return ContestStatus.ENDED
         else:
-            return ContestStatus.ACTIVE
+            return ContestStatus.LIVE
 
 
 class ContestProblem(Base):
     __tablename__ = "contest_problems"
     __table_args__ = (
         UniqueConstraint("contest_id", "problem_id", name="uq_contest_problem"),
+        UniqueConstraint("contest_id", "position", name="uq_contest_position"),
         CheckConstraint("points > 0", name="check_positive_contest_problem_points"),
+        CheckConstraint("position > 0", name="check_positive_contest_problem_position"),
     )
 
     id: Mapped[int] = mapped_column(
@@ -155,8 +137,8 @@ class ContestProblem(Base):
         primary_key=True,
         autoincrement=True,
     )
-    contest_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    contest_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("contests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -167,11 +149,10 @@ class ContestProblem(Base):
         nullable=False,
         index=True,
     )
-    order_index: Mapped[int] = mapped_column(
+    position: Mapped[int] = mapped_column(
         Integer,
-        default=0,
         nullable=False,
-        comment="Problem ordering within the contest (e.g. 0 for Problem A, 1 for Problem B)",
+        comment="Problem ordering within the contest (1 for P1, 2 for P2, etc.)",
     )
     points: Mapped[float] = mapped_column(
         Float,
@@ -196,17 +177,15 @@ class ContestProblem(Base):
 
 class ContestParticipant(Base):
     __tablename__ = "contest_participants"
-    __table_args__ = (
-        UniqueConstraint("contest_id", "user_id", name="uq_contest_participant"),
-    )
+    __table_args__ = (UniqueConstraint("contest_id", "user_id", name="uq_contest_participant"),)
 
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
         autoincrement=True,
     )
-    contest_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    contest_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("contests.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -244,7 +223,12 @@ class ContestParticipant(Base):
     rank: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        comment="Current or final contest leaderboard rank",
+        comment="Contest leaderboard rank",
+    )
+    last_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp of last accepted submission for tie-breaking",
     )
 
     # Relationships
@@ -254,4 +238,3 @@ class ContestParticipant(Base):
     user: Mapped["User"] = relationship(
         lazy="selectin",
     )
-

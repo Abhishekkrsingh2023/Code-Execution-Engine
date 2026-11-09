@@ -47,6 +47,8 @@ interface WorkspaceShellProps {
   isAuthenticated: boolean;
   currentUser?: UserResponse | null;
   problemId: number;
+  contestId?: number;
+  onSubmissionComplete?: () => void;
 }
 
 export function WorkspaceShell({
@@ -54,11 +56,23 @@ export function WorkspaceShell({
   isAuthenticated,
   currentUser,
   problemId,
+  contestId,
+  onSubmissionComplete,
 }: WorkspaceShellProps) {
+  const getDraftKey = useCallback(
+    (lang: SupportedLanguage) =>
+      contestId
+        ? `code0_draft_c${contestId}_p${problemId}_${lang}`
+        : `code0_draft_${problemId}_${lang}`,
+    [contestId, problemId]
+  );
+
   const [language, setLanguage] = useState<SupportedLanguage>("python");
   const [code, setCode] = useState<string>(() => {
     if (typeof window !== "undefined") {
-      const draftKey = `code0_draft_${problemId}_python`;
+      const draftKey = contestId
+        ? `code0_draft_c${contestId}_p${problemId}_python`
+        : `code0_draft_${problemId}_python`;
       const saved = localStorage.getItem(draftKey);
       if (saved !== null && saved.trim() !== "") {
         return saved;
@@ -122,7 +136,7 @@ export function WorkspaceShell({
     (newLang: SupportedLanguage) => {
       setLanguage(newLang);
       if (typeof window !== "undefined") {
-        const draftKey = `code0_draft_${problemId}_${newLang}`;
+        const draftKey = getDraftKey(newLang);
         const saved = localStorage.getItem(draftKey);
         if (saved !== null && saved.trim() !== "") {
           setCode(saved);
@@ -131,14 +145,14 @@ export function WorkspaceShell({
       }
       setCode(getStarterCode(newLang, problemData));
     },
-    [problemData, problemId]
+    [problemData, getDraftKey]
   );
 
   // Save draft on edit
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
     if (typeof window !== "undefined") {
-      localStorage.setItem(`code0_draft_${problemId}_${language}`, newCode);
+      localStorage.setItem(getDraftKey(language), newCode);
     }
   };
 
@@ -147,7 +161,7 @@ export function WorkspaceShell({
     const starter = getStarterCode(language, problemData);
     setCode(starter);
     if (typeof window !== "undefined") {
-      localStorage.setItem(`code0_draft_${problemId}_${language}`, starter);
+      localStorage.setItem(getDraftKey(language), starter);
     }
   };
 
@@ -183,6 +197,7 @@ export function WorkspaceShell({
           setExecResult(data);
           if (mode === "submit") {
             setSubmissionsRefreshTrigger((prev) => prev + 1);
+            onSubmissionComplete?.();
           }
         } else {
           setExecStatus(st || "running");
@@ -191,7 +206,7 @@ export function WorkspaceShell({
         // network retry
       }
     }, 1200);
-  }, [cleanupPolling]);
+  }, [cleanupPolling, onSubmissionComplete]);
 
   // Load a past submission into the editor
   const handleLoadPastCode = useCallback(
@@ -199,11 +214,11 @@ export function WorkspaceShell({
       handleLanguageChange(pastLang);
       setCode(pastCode);
       if (typeof window !== "undefined") {
-        localStorage.setItem(`code0_draft_${problemId}_${pastLang}`, pastCode);
+        localStorage.setItem(getDraftKey(pastLang), pastCode);
       }
       setMobileTab("code");
     },
-    [handleLanguageChange, problemId]
+    [handleLanguageChange, getDraftKey]
   );
 
   // Trigger Run or Submit
@@ -228,7 +243,13 @@ export function WorkspaceShell({
     setBottomPanelCollapsed(false);
     setMobileTab("output");
 
-    const endpoint = mode === "submit" ? "/api/code/submit" : "/api/code/run";
+    const endpoint = contestId
+      ? mode === "submit"
+        ? `/api/contests/${contestId}/submit`
+        : `/api/contests/${contestId}/run`
+      : mode === "submit"
+      ? "/api/code/submit"
+      : "/api/code/run";
 
     const payload: {
       problem_id: number;

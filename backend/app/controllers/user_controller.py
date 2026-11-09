@@ -693,4 +693,3 @@ async def handle_get_user_submission_detail(
         source_code=sub.source_code,
         created_at=sub.created_at,
     )
-

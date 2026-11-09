@@ -7,7 +7,6 @@ They provide the following functionalities:
 3. Check if the user has the required role (admin, moderator, or user).
 """
 
-
 import uuid
 from typing import Annotated
 

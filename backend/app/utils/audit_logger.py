@@ -40,7 +40,7 @@ def to_str_val(val: object) -> str:
 def sanitize_details(data: object) -> object:
     """Recursively scrub sensitive fields like passwords, tokens, and OTPs."""
     if isinstance(data, dict):
-        cleaned = {}
+        cleaned: dict[Any, Any] = {}
         for k, v in data.items():
             if any(sensitive in str(k).lower() for sensitive in SENSITIVE_KEYS):
                 cleaned[k] = "[REDACTED]"

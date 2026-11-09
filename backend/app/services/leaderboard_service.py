@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 from loguru import logger
@@ -39,7 +40,7 @@ async def resolve_problem_id(problem_id_val: int | str | None, db: AsyncSession)
 
 
 def _accumulate_scores(
-    rows: list[Any], initial_score: float, initial_solved: int
+    rows: Sequence[Any], initial_score: float, initial_solved: int
 ) -> tuple[float, int]:
     total = initial_score
     solved = initial_solved
@@ -61,7 +62,11 @@ async def update_user_leaderboard_score(user_id: uuid.UUID, db: AsyncSession) ->
     - If a submission solves an ad-hoc problem (without a registered Problem.id), it groups by problem_name.
     - A problem is marked 'solved' when max_score > 0 and best_score >= max_score, or status is ACCEPTED.
     """
-    # 1. Registered problems
+    # 1. Registered problems (Rule 8: contest submissions only count after contest ends)
+    from sqlalchemy import or_
+
+    from app.models.contest import Contest
+
     stmt_registered = (
         select(
             Submission.problem_id,
@@ -69,9 +74,14 @@ async def update_user_leaderboard_score(user_id: uuid.UUID, db: AsyncSession) ->
             func.max(Submission.max_score).label("max_score"),
             func.bool_or(Submission.status == SubmissionStatus.ACCEPTED).label("is_accepted"),
         )
+        .outerjoin(Contest, Submission.contest_id == Contest.id)
         .where(
             Submission.user_id == user_id,
             Submission.problem_id.is_not(None),
+            or_(
+                Submission.contest_id.is_(None),
+                Contest.end_time <= func.now(),
+            ),
         )
         .group_by(Submission.problem_id)
     )
@@ -101,6 +111,11 @@ async def update_user_leaderboard_score(user_id: uuid.UUID, db: AsyncSession) ->
     # 3. Update the user row
     user_stmt = select(User).where(User.id == user_id)
     user = (await db.execute(user_stmt)).scalar_one_or_none()
+    if not reg_rows and not adhoc_rows and user and user.total_score > 0:
+        stmt_any_sub = select(func.count(Submission.id)).where(Submission.user_id == user_id)
+        if (await db.execute(stmt_any_sub)).scalar_one() == 0:
+            return user.total_score, user.problems_solved
+
     if user:
         user.total_score = total_score
         user.problems_solved = problems_solved
@@ -234,6 +249,7 @@ async def _record_submission_in_session(
         if submission.contest_id:
             try:
                 from app.services.contest_service import recalculate_contest_participant_stats
+
                 await recalculate_contest_participant_stats(submission.contest_id, user_id, db)
             except Exception as c_exc:
                 logger.warning(
@@ -320,6 +336,9 @@ async def get_user_rank_data(
     db: AsyncSession,
 ) -> dict[str, Any] | None:
     """Calculates the specific rank and stats for a given regular user."""
+    # Ensure any recently ended contest submissions are included in stored score
+    await update_user_leaderboard_score(user_id, db)
+
     stmt = select(User).where(
         User.id == user_id,
         User.status == UserStatus.ACTIVE,

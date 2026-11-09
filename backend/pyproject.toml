@@ -26,8 +26,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.4",
 ]
 
 [tool.pytest.ini_options]
@@ -69,4 +71,13 @@ extend-immutable-calls = [
 
 [tool.fastapi]
 entrypoint = "app.main:app"
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "."
+explicit_package_bases = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["alembic", "tests"]
+
 

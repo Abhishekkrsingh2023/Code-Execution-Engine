@@ -1,3 +1,5 @@
+from typing import Literal, cast
+
 from fastapi import Response
 from loguru import logger
 
@@ -16,6 +18,7 @@ def set_auth_cookies(
         access_token: Encoded JWT access token.
         refresh_token: Optional encoded JWT refresh token.
     """
+    samesite_val = cast(Literal["lax", "strict", "none"], settings.COOKIE_SAMESITE.lower())
     access_max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     response.set_cookie(
         key=settings.ACCESS_TOKEN_COOKIE_NAME,
@@ -26,7 +29,7 @@ def set_auth_cookies(
         domain=settings.COOKIE_DOMAIN,
         secure=settings.COOKIE_SECURE,
         httponly=settings.COOKIE_HTTPONLY,
-        samesite=settings.COOKIE_SAMESITE,  # "lax", "strict", or "none"
+        samesite=samesite_val,
     )
 
     if refresh_token:
@@ -40,7 +43,7 @@ def set_auth_cookies(
             domain=settings.COOKIE_DOMAIN,
             secure=settings.COOKIE_SECURE,
             httponly=settings.COOKIE_HTTPONLY,
-            samesite=settings.COOKIE_SAMESITE,
+            samesite=samesite_val,
         )
 
     logger.debug(
@@ -56,13 +59,14 @@ def clear_auth_cookies(response: Response) -> None:
     Args:
         response: FastAPI / Starlette response object.
     """
+    samesite_val = cast(Literal["lax", "strict", "none"], settings.COOKIE_SAMESITE.lower())
     response.delete_cookie(
         key=settings.ACCESS_TOKEN_COOKIE_NAME,
         path=settings.COOKIE_PATH,
         domain=settings.COOKIE_DOMAIN,
         secure=settings.COOKIE_SECURE,
         httponly=settings.COOKIE_HTTPONLY,
-        samesite=settings.COOKIE_SAMESITE,
+        samesite=samesite_val,
     )
     response.delete_cookie(
         key=settings.REFRESH_TOKEN_COOKIE_NAME,
@@ -70,6 +74,6 @@ def clear_auth_cookies(response: Response) -> None:
         domain=settings.COOKIE_DOMAIN,
         secure=settings.COOKIE_SECURE,
         httponly=settings.COOKIE_HTTPONLY,
-        samesite=settings.COOKIE_SAMESITE,
+        samesite=samesite_val,
     )
     logger.debug("Cleared authentication cookies from client response")

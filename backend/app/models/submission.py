@@ -58,8 +58,8 @@ class Submission(Base):
         index=True,
         nullable=True,
     )
-    contest_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    contest_id: Mapped[int | None] = mapped_column(
+        Integer,
         ForeignKey("contests.id", ondelete="CASCADE"),
         index=True,
         nullable=True,

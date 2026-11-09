@@ -1,11 +1,9 @@
-import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.contest_controller import (
-    handle_assign_problem,
     handle_contest_run,
     handle_contest_submit,
     handle_create_contest,
@@ -13,20 +11,16 @@ from app.controllers.contest_controller import (
     handle_get_contest,
     handle_get_contest_leaderboard,
     handle_get_contest_my_rank,
-    handle_get_contest_participants,
     handle_get_contest_problem_detail,
     handle_get_contest_problems,
-    handle_get_contest_submissions,
-    handle_get_my_contest_submissions,
     handle_list_contests,
     handle_register_contest,
-    handle_remove_problem,
     handle_unregister_contest,
     handle_update_contest,
-    handle_update_problem_in_contest,
 )
 from app.database import get_db
 from app.dependencies import (
+    AdminUserDep,
     CurrentUserDep,
     CurrentUserOptionalDep,
     ModeratorUserDep,
@@ -34,16 +28,14 @@ from app.dependencies import (
 from app.limiter import limiter
 from app.schemas.contest import (
     ContestCreateRequest,
+    ContestLeaderboardEntry,
     ContestLeaderboardResponse,
     ContestListResponse,
     ContestParticipantResponse,
-    ContestProblemAssignRequest,
     ContestProblemDetailResponse,
     ContestProblemResponse,
-    ContestProblemUpdateRequest,
     ContestResponse,
     ContestRunRequest,
-    ContestSubmissionListResponse,
     ContestSubmitRequest,
     ContestUpdateRequest,
 )
@@ -89,14 +81,14 @@ async def list_contests(
         str | None,
         Query(
             alias="status",
-            description="Status filter: upcoming, active, completed, draft, or cancelled",
+            description="Status filter: upcoming, live, or ended",
         ),
     ] = None,
     search: Annotated[str | None, Query(description="Search term in title or description")] = None,
     current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> ContestListResponse:
-    """Lists contests. Regular users only see published contests (upcoming, active, completed)."""
+    """Lists contests with status derived dynamically from the server clock."""
     return await handle_list_contests(
         skip=skip,
         limit=limit,
@@ -114,11 +106,11 @@ async def list_contests(
     summary="Get contest details",
 )
 async def get_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> ContestResponse:
-    """Retrieves full contest details, registration status, and assigned problems when active/completed."""
+    """Retrieves full contest details. Problem statements are hidden before start_time for non-staff."""
     return await handle_get_contest(
         contest_id=contest_id,
         current_user=current_user,
@@ -133,13 +125,13 @@ async def get_contest(
     summary="Update contest parameters (Admin or Moderator)",
 )
 async def update_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     payload: ContestUpdateRequest,
     request: Request,
     current_user: ModeratorUserDep,
     db: AsyncSession = Depends(get_db),
 ) -> ContestResponse:
-    """Updates contest timing, title, description, or status."""
+    """Updates a contest. If live, only title and description may be modified. If ended, locked."""
     return await handle_update_contest(
         contest_id=contest_id,
         payload=payload,
@@ -153,15 +145,15 @@ async def update_contest(
     "/{contest_id}",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
-    summary="Delete contest (Admin or Moderator)",
+    summary="Delete an upcoming contest (Admin only)",
 )
 async def delete_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     request: Request,
-    current_user: ModeratorUserDep,
+    current_user: AdminUserDep,
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    """Deletes a contest and cascade deletes participant and problem associations."""
+    """Deletes an upcoming contest. Rule 7 & 10: Admin only, allowed only for upcoming contests."""
     return await handle_delete_contest(
         contest_id=contest_id,
         current_user=current_user,
@@ -177,14 +169,16 @@ async def delete_contest(
     summary="Register for a contest",
 )
 async def register_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
+    request: Request,
     current_user: CurrentUserDep,
     db: AsyncSession = Depends(get_db),
 ) -> ContestParticipantResponse:
-    """Registers the authenticated user for an upcoming or active contest."""
+    """Registers an active, email-verified user for a contest up until its end time."""
     return await handle_register_contest(
         contest_id=contest_id,
         current_user=current_user,
+        request=request,
         db=db,
     )
 
@@ -193,88 +187,17 @@ async def register_contest(
     "/{contest_id}/register",
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
-    summary="Unregister from a contest (before start only)",
+    summary="Unregister from a contest",
 )
 async def unregister_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     current_user: CurrentUserDep,
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    """Unregisters the user from an upcoming contest."""
+    """Unregisters a participant before the contest start time."""
     return await handle_unregister_contest(
         contest_id=contest_id,
         current_user=current_user,
-        db=db,
-    )
-
-
-@router.post(
-    "/{contest_id}/problems",
-    response_model=ContestProblemResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Assign a problem to contest (Admin or Moderator)",
-)
-async def assign_problem_to_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
-    payload: ContestProblemAssignRequest,
-    request: Request,
-    current_user: ModeratorUserDep,
-    db: AsyncSession = Depends(get_db),
-) -> ContestProblemResponse:
-    """Assigns an existing problem to the contest with configured points and ordering."""
-    return await handle_assign_problem(
-        contest_id=contest_id,
-        payload=payload,
-        current_user=current_user,
-        request=request,
-        db=db,
-    )
-
-
-@router.delete(
-    "/{contest_id}/problems/{problem_id:int}",
-    response_model=MessageResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Remove a problem from contest (Admin or Moderator)",
-)
-async def remove_problem_from_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
-    problem_id: Annotated[int, Path(ge=1, description="Problem ID")],
-    request: Request,
-    current_user: ModeratorUserDep,
-    db: AsyncSession = Depends(get_db),
-) -> MessageResponse:
-    """Removes a problem assignment from the contest."""
-    return await handle_remove_problem(
-        contest_id=contest_id,
-        problem_id=problem_id,
-        current_user=current_user,
-        request=request,
-        db=db,
-    )
-
-
-@router.patch(
-    "/{contest_id}/problems/{problem_id:int}",
-    response_model=ContestProblemResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Update problem points or ordering in contest (Admin or Moderator)",
-)
-async def update_problem_in_contest(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
-    problem_id: Annotated[int, Path(ge=1, description="Problem ID")],
-    payload: ContestProblemUpdateRequest,
-    request: Request,
-    current_user: ModeratorUserDep,
-    db: AsyncSession = Depends(get_db),
-) -> ContestProblemResponse:
-    """Updates points or order index for an assigned problem."""
-    return await handle_update_problem_in_contest(
-        contest_id=contest_id,
-        problem_id=problem_id,
-        payload=payload,
-        current_user=current_user,
-        request=request,
         db=db,
     )
 
@@ -283,14 +206,14 @@ async def update_problem_in_contest(
     "/{contest_id}/problems",
     response_model=list[ContestProblemResponse],
     status_code=status.HTTP_200_OK,
-    summary="List problems assigned to contest",
+    summary="Get contest problem list",
 )
-async def list_contest_problems(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+async def get_contest_problems(
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[ContestProblemResponse]:
-    """Lists problems assigned to the contest once the contest is active or completed."""
+    """Retrieves ordered problems in a contest. Returns 403 before start_time for non-staff."""
     return await handle_get_contest_problems(
         contest_id=contest_id,
         current_user=current_user,
@@ -299,18 +222,18 @@ async def list_contest_problems(
 
 
 @router.get(
-    "/{contest_id}/problems/{problem_id:int}",
+    "/{contest_id}/problems/{problem_id}",
     response_model=ContestProblemDetailResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get contest problem details and sample test cases",
+    summary="Get contest problem details and statement",
 )
 async def get_contest_problem_detail(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     problem_id: Annotated[int, Path(ge=1, description="Problem ID")],
     current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> ContestProblemDetailResponse:
-    """Retrieves problem statement, sample test cases, and constraints for contest solving."""
+    """Retrieves problem statement. Returns 403 before start_time for non-staff."""
     return await handle_get_contest_problem_detail(
         contest_id=contest_id,
         problem_id=problem_id,
@@ -321,22 +244,23 @@ async def get_contest_problem_detail(
 
 @router.post(
     "/{contest_id}/submit",
-    status_code=status.HTTP_200_OK,
-    summary="Submit solution to contest problem",
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit solution to a contest problem",
 )
-@limiter.limit("6/minute")
+@limiter.limit("10/minute")
 async def submit_contest_solution(
-    request: Request,
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     payload: ContestSubmitRequest,
+    request: Request,
     current_user: CurrentUserDep,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Submits code for evaluation within this contest, strictly enforcing time windows and registration."""
+    """Submits code for evaluation during a live contest for a registered participant."""
     return await handle_contest_submit(
         contest_id=contest_id,
         payload=payload,
         current_user=current_user,
+        request=request,
         db=db,
     )
 
@@ -344,21 +268,22 @@ async def submit_contest_solution(
 @router.post(
     "/{contest_id}/run",
     status_code=status.HTTP_200_OK,
-    summary="Run code against sample or custom test cases within contest problem",
+    summary="Run code against test cases in a live contest",
 )
-@limiter.limit("6/minute")
-async def run_contest_test_cases(
-    request: Request,
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+@limiter.limit("20/minute")
+async def run_contest_code(
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     payload: ContestRunRequest,
-    current_user: CurrentUserOptionalDep = None,
+    request: Request,
+    current_user: CurrentUserDep,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Runs code for testing within contest problem without altering contest score."""
+    """Rule 11: Executes test cases in a live contest for a registered participant."""
     return await handle_contest_run(
         contest_id=contest_id,
         payload=payload,
         current_user=current_user,
+        request=request,
         db=db,
     )
 
@@ -367,16 +292,16 @@ async def run_contest_test_cases(
     "/{contest_id}/leaderboard",
     response_model=ContestLeaderboardResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get contest leaderboard and winner information",
+    summary="Get contest leaderboard",
 )
 async def get_contest_leaderboard(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     current_user: CurrentUserOptionalDep = None,
     db: AsyncSession = Depends(get_db),
 ) -> ContestLeaderboardResponse:
-    """Retrieves ranked contest leaderboard with tie-breaking rules and winner information."""
+    """Retrieves real-time contest leaderboard computed under ICPC rules."""
     return await handle_get_contest_leaderboard(
         contest_id=contest_id,
         current_user=current_user,
@@ -388,89 +313,18 @@ async def get_contest_leaderboard(
 
 @router.get(
     "/{contest_id}/leaderboard/me",
+    response_model=ContestLeaderboardEntry,
     status_code=status.HTTP_200_OK,
-    summary="Get authenticated user's rank in contest",
+    summary="Get current user's contest rank",
 )
-async def get_my_contest_rank(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
+async def get_contest_my_rank(
+    contest_id: Annotated[int, Path(ge=1, description="Contest ID")],
     current_user: CurrentUserDep,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Returns current user's contest ranking and score breakdown."""
+) -> ContestLeaderboardEntry:
+    """Retrieves the authenticated user's current rank and problem breakdown in this contest."""
     return await handle_get_contest_my_rank(
         contest_id=contest_id,
         current_user=current_user,
-        db=db,
-    )
-
-
-@router.get(
-    "/{contest_id}/participants",
-    response_model=list[ContestParticipantResponse],
-    status_code=status.HTTP_200_OK,
-    summary="List registered participants in contest",
-)
-async def list_contest_participants(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
-    skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    db: AsyncSession = Depends(get_db),
-) -> list[ContestParticipantResponse]:
-    """Lists registered participants in the contest."""
-    return await handle_get_contest_participants(
-        contest_id=contest_id,
-        skip=skip,
-        limit=limit,
-        db=db,
-    )
-
-
-@router.get(
-    "/{contest_id}/submissions",
-    response_model=ContestSubmissionListResponse,
-    status_code=status.HTTP_200_OK,
-    summary="List all submissions in contest (Admin or Moderator)",
-)
-async def list_contest_submissions(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
-    current_user: ModeratorUserDep,
-    skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    user_id: Annotated[uuid.UUID | None, Query(description="Filter by user")] = None,
-    problem_id: Annotated[int | None, Query(description="Filter by problem")] = None,
-    db: AsyncSession = Depends(get_db),
-) -> ContestSubmissionListResponse:
-    """Lists all submissions made during the contest for moderators and administrators."""
-    return await handle_get_contest_submissions(
-        contest_id=contest_id,
-        skip=skip,
-        limit=limit,
-        user_id=user_id,
-        problem_id=problem_id,
-        db=db,
-    )
-
-
-@router.get(
-    "/{contest_id}/my-submissions",
-    response_model=ContestSubmissionListResponse,
-    status_code=status.HTTP_200_OK,
-    summary="List my submissions in contest",
-)
-async def list_my_contest_submissions(
-    contest_id: Annotated[uuid.UUID, Path(description="Contest UUID")],
-    current_user: CurrentUserDep,
-    skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    problem_id: Annotated[int | None, Query(description="Filter by problem")] = None,
-    db: AsyncSession = Depends(get_db),
-) -> ContestSubmissionListResponse:
-    """Lists authenticated user's submissions in this contest."""
-    return await handle_get_my_contest_submissions(
-        contest_id=contest_id,
-        current_user=current_user,
-        skip=skip,
-        limit=limit,
-        problem_id=problem_id,
         db=db,
     )
