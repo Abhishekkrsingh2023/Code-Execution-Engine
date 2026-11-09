@@ -18,7 +18,7 @@ def get_sender_address() -> str:
     from_email = settings.FROM_EMAIL.strip() if settings.FROM_EMAIL else "codersclub@bbitclub.io"
     if "<" in from_email and ">" in from_email:
         return from_email
-    return f"code0 <{from_email}>"
+    return f"codersclub <{from_email}>"
 
 
 def build_otp_email_html(otp_code: str, name: str | None = None) -> str:
