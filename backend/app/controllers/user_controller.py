@@ -1,5 +1,6 @@
 import re
 import secrets
+import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, Response, status
@@ -8,7 +9,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.problem import Problem
+from app.models.submission import Submission
 from app.models.user import User, UserRole, UserStatus
+from app.schemas.submission import UserSubmissionListResponse, UserSubmissionResponse
 from app.schemas.user import (
     MessageResponse,
     OTPResponse,
@@ -585,3 +589,108 @@ async def handle_update_current_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update user profile due to an internal error.",
         ) from exc
+
+
+async def handle_get_user_submissions(
+    current_user: User,
+    skip: int,
+    limit: int,
+    problem_id: int | None,
+    status_filter: str | None,
+    db: AsyncSession,
+) -> UserSubmissionListResponse:
+    """Retrieves paginated submission history for the authenticated user."""
+    stmt = (
+        select(Submission, Problem.title)
+        .outerjoin(Problem, Submission.problem_id == Problem.id)
+        .where(Submission.user_id == current_user.id)
+    )
+
+    count_stmt = select(func.count(Submission.id)).where(Submission.user_id == current_user.id)
+
+    if problem_id is not None:
+        stmt = stmt.where(Submission.problem_id == problem_id)
+        count_stmt = count_stmt.where(Submission.problem_id == problem_id)
+
+    if status_filter:
+        clean_status = status_filter.strip().lower()
+        stmt = stmt.where(func.lower(Submission.status) == clean_status)
+        count_stmt = count_stmt.where(func.lower(Submission.status) == clean_status)
+
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    stmt = stmt.order_by(Submission.created_at.desc()).offset(skip).limit(limit)
+    rows = (await db.execute(stmt)).all()
+
+    submissions = [
+        UserSubmissionResponse(
+            id=sub.id,
+            user_id=sub.user_id,
+            problem_id=sub.problem_id,
+            problem_name=(
+                sub.problem_name
+                if (sub.problem_name and sub.problem_name != "Problem Submission")
+                else (prob_title or sub.problem_name or "Problem")
+            ),
+            language=sub.language.value if hasattr(sub.language, "value") else str(sub.language),
+            status=sub.status.value if hasattr(sub.status, "value") else str(sub.status),
+            score=sub.score,
+            max_score=sub.max_score,
+            tests_passed=sub.tests_passed,
+            total_tests=sub.total_tests,
+            execution_time=sub.execution_time,
+            memory_used=sub.memory_used,
+            source_code=sub.source_code,
+            created_at=sub.created_at,
+        )
+        for sub, prob_title in rows
+    ]
+
+    return UserSubmissionListResponse(
+        total=total,
+        skip=skip,
+        limit=limit,
+        submissions=submissions,
+    )
+
+
+async def handle_get_user_submission_detail(
+    submission_id: uuid.UUID,
+    current_user: User,
+    db: AsyncSession,
+) -> UserSubmissionResponse:
+    """Retrieves single submission details for the authenticated user."""
+    stmt = (
+        select(Submission, Problem.title)
+        .outerjoin(Problem, Submission.problem_id == Problem.id)
+        .where(Submission.id == submission_id, Submission.user_id == current_user.id)
+    )
+    row = (await db.execute(stmt)).first()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Submission not found.",
+        )
+    sub, prob_title = row
+
+    return UserSubmissionResponse(
+        id=sub.id,
+        user_id=sub.user_id,
+        problem_id=sub.problem_id,
+        problem_name=(
+            sub.problem_name
+            if (sub.problem_name and sub.problem_name != "Problem Submission")
+            else (prob_title or sub.problem_name or "Problem")
+        ),
+        language=sub.language.value if hasattr(sub.language, "value") else str(sub.language),
+        status=sub.status.value if hasattr(sub.status, "value") else str(sub.status),
+        score=sub.score,
+        max_score=sub.max_score,
+        tests_passed=sub.tests_passed,
+        total_tests=sub.total_tests,
+        execution_time=sub.execution_time,
+        memory_used=sub.memory_used,
+        source_code=sub.source_code,
+        created_at=sub.created_at,
+    )
+

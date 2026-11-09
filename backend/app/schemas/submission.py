@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -92,3 +93,34 @@ class SubmitRequest(SubmissionRequest):
         default=ExecutionMode.submit,
         description="Execution mode for submit (defaults to 'submit').",
     )
+
+
+class UserSubmissionResponse(BaseModel):
+    """Schema representing an individual submission record for a user."""
+
+    id: uuid.UUID
+    user_id: uuid.UUID | None = None
+    problem_id: int | None = None
+    problem_name: str | None = None
+    language: str
+    status: str
+    score: float = 0.0
+    max_score: float = 0.0
+    tests_passed: int = 0
+    total_tests: int = 0
+    execution_time: float | None = None
+    memory_used: float | None = None
+    source_code: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserSubmissionListResponse(BaseModel):
+    """Paginated list of user submissions."""
+
+    total: int
+    skip: int
+    limit: int
+    submissions: list[UserSubmissionResponse]
+

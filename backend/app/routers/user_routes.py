@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, Request, Response, status
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers.user_controller import (
     handle_check_username_availability,
     handle_get_user_by_username,
+    handle_get_user_submission_detail,
+    handle_get_user_submissions,
     handle_login_user,
     handle_logout_user,
     handle_refresh_token,
@@ -13,9 +18,10 @@ from app.controllers.user_controller import (
     handle_verify_otp,
 )
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import CurrentUserDep, get_current_user
 from app.limiter import limiter
 from app.models.user import User
+from app.schemas.submission import UserSubmissionListResponse, UserSubmissionResponse
 from app.schemas.user import (
     MessageResponse,
     OTPResponse,
@@ -172,6 +178,62 @@ async def update_current_user_profile(
         HTTPException: 500 if database persistence fails.
     """
     return await handle_update_current_user(current_user=current_user, payload=payload, db=db)
+
+
+@router.get(
+    "/me/submissions",
+    response_model=UserSubmissionListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List authenticated user's submissions",
+    description="Retrieves a paginated list of code submissions made by the currently authenticated user with optional filtering by problem and status.",
+    responses={
+        200: {"description": "List of user submissions retrieved successfully."},
+        401: {"description": "Unauthenticated."},
+    },
+)
+async def list_my_submissions(
+    current_user: CurrentUserDep,
+    skip: Annotated[int, Query(ge=0, description="Number of submissions to skip")] = 0,
+    limit: Annotated[int, Query(ge=1, le=100, description="Max number of submissions to return")] = 20,
+    problem_id: Annotated[int | None, Query(description="Filter submissions by problem ID")] = None,
+    status: Annotated[str | None, Query(description="Filter submissions by verdict/status")] = None,
+    db: AsyncSession = Depends(get_db),
+) -> UserSubmissionListResponse:
+    """Lists the authenticated user's historical submissions with pagination and filters."""
+    return await handle_get_user_submissions(
+        current_user=current_user,
+        skip=skip,
+        limit=limit,
+        problem_id=problem_id,
+        status_filter=status,
+        db=db,
+    )
+
+
+@router.get(
+    "/me/submissions/{submission_id}",
+    response_model=UserSubmissionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get authenticated user submission details",
+    description="Retrieves details and source code of a specific submission owned by the currently authenticated user.",
+    responses={
+        200: {"description": "Submission details retrieved successfully."},
+        401: {"description": "Unauthenticated."},
+        404: {"description": "Submission not found or not owned by user."},
+    },
+)
+async def get_my_submission_detail(
+    submission_id: Annotated[uuid.UUID, Path(description="UUID of the submission")],
+    current_user: CurrentUserDep,
+    db: AsyncSession = Depends(get_db),
+) -> UserSubmissionResponse:
+    """Retrieves full details including source code for a single submission owned by the authenticated user."""
+    return await handle_get_user_submission_detail(
+        submission_id=submission_id,
+        current_user=current_user,
+        db=db,
+    )
+
 
 
 @router.post(

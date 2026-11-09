@@ -29,6 +29,7 @@ tests/
 ├── test_root_routes.py    # Health check and Redis ping routes (/health, /ping-redis)
 ├── test_code_routes.py    # Code submission, polling, and SSE streaming (/api-v1/code/*)
 ├── test_user_routes.py    # Registration, login, OTP, CRUD, and username checks (/api-v1/users/*)
+├── test_user_submissions.py # User submission history, filters, pagination, and detail inspection
 └── README.md              # Documentation for the testing setup
 ```
 
@@ -98,6 +99,23 @@ tests/
 - `DELETE /api-v1/users/{user_id}`:
   - Deleting user and cascading removal (`200 OK`).
   - Deleting non-existent user (`404 Not Found`).
+
+### `test_user_submissions.py` (12 tests)
+- `GET /api-v1/users/me/submissions`:
+  - Rejection of unauthenticated requests (`401 Unauthorized`).
+  - Empty submissions array for new users with `total=0` (`200 OK`).
+  - Correct schema fields, data types, and descending date ordering (`200 OK`).
+  - User isolation: verifies that User A cannot see User B's submissions.
+  - Problem filtering via `?problem_id={id}` query parameter.
+  - Verdict/status filtering via `?status={verdict}` query parameter.
+  - Pagination offset and limit checks (`?skip=...&limit=...`).
+- `GET /api-v1/users/me/submissions/{submission_id}`:
+  - Full details and source code retrieval by submission owner (`200 OK`).
+  - Ownership protection: returns `404 Not Found` when accessed by another user.
+  - Non-existent submission identifier lookup (`404 Not Found`).
+- Aliased code routes:
+  - Verifies `GET /api-v1/code/submissions/me` returns matching paginated list.
+  - Verifies `GET /api-v1/code/submissions/{submission_id}` returns matching submission details.
 
 ---
 
