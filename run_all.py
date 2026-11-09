@@ -24,9 +24,9 @@ RESET = "\033[0m"
 
 ROOT_DIR = Path(__file__).parent.resolve()
 BACKEND_DIR = ROOT_DIR / "backend"
-FRONTEND_DIR = ROOT_DIR / "frontend"
+FRONTEND_DIR = ROOT_DIR / "web"
 WORKER_DIR = ROOT_DIR / "worker"
-ADMIN_FRONTEND_DIR = ROOT_DIR / "admin-frontend"
+ADMIN_FRONTEND_DIR = ROOT_DIR / "admin"
 
 
 def check_tcp_port(host: str, port: int, timeout: float = 1.0) -> bool:
