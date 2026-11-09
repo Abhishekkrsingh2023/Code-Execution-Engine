@@ -77,6 +77,15 @@ def setup_test_database() -> Generator[None]:
     asyncio.run(_teardown())
 
 
+@pytest.fixture(autouse=True)
+def mock_resend_emails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock resend.Emails.send during tests to prevent live external network calls."""
+    monkeypatch.setattr(
+        "resend.Emails.send",
+        lambda params: {"id": "mock_email_id_test"},
+    )
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession]:
     """Provides a clean database session for each test.

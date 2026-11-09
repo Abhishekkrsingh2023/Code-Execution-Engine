@@ -27,6 +27,7 @@ from app.schemas.user import (
     UserUpdateRequest,
     VerifyOTPRequest,
 )
+from app.services.email_service import send_otp_email
 from app.utils.cookies import clear_auth_cookies, set_auth_cookies
 from app.utils.jwt import create_access_token, create_refresh_token, decode_jwt_token
 from app.utils.security import (
@@ -103,11 +104,10 @@ async def handle_register_user(
         await db.refresh(new_user)
         logger.info("Successfully registered user '{}' (ID: {})", new_user.username, new_user.id)
         logger.info(
-            "[MOCK EMAIL] Verification OTP for new user {} is: {} (valid for 10 minutes)",
+            "[OTP DISPATCH] Verification OTP for new user {} is: {} (valid for 10 minutes)",
             new_user.email,
             otp_code,
         )
-        return UserResponse.model_validate(new_user)
     except Exception as exc:
         await db.rollback()
         logger.exception("Failed to register user: {}", exc)
@@ -115,6 +115,22 @@ async def handle_register_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to register user due to an internal error.",
         ) from exc
+
+    # Dispatch verification email via Resend
+    try:
+        await send_otp_email(
+            to_email=new_user.email,
+            otp_code=otp_code,
+            name=new_user.name or new_user.username,
+        )
+    except Exception as email_exc:
+        logger.error(
+            "User '{}' registered, but sending verification email failed: {}",
+            new_user.email,
+            email_exc,
+        )
+
+    return UserResponse.model_validate(new_user)
 
 
 async def handle_login_user(
@@ -239,16 +255,8 @@ async def handle_request_otp(
         logger.info("Updated OTP for existing user '{}'", user.email)
 
         await db.commit()
-        # In production, dispatch email via background worker/SMTP here.
-        # For development / judge engine API, we log the OTP safely.
         logger.info(
-            "[MOCK EMAIL] OTP for {} is: {} (valid for 10 minutes)", payload.email, otp_code
-        )
-
-        return OTPResponse(
-            message="OTP generated and sent to email successfully.",
-            email=payload.email,
-            expires_in_seconds=600,
+            "[OTP DISPATCH] OTP for {} is: {} (valid for 10 minutes)", payload.email, otp_code
         )
     except Exception as exc:
         await db.rollback()
@@ -257,6 +265,26 @@ async def handle_request_otp(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate OTP.",
         ) from exc
+
+    # Dispatch verification email via Resend
+    try:
+        await send_otp_email(
+            to_email=user.email,
+            otp_code=otp_code,
+            name=user.name or user.username,
+        )
+    except Exception as email_exc:
+        logger.error("Failed to dispatch OTP email to '{}': {}", user.email, email_exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to dispatch verification email. Please try again later.",
+        ) from email_exc
+
+    return OTPResponse(
+        message="OTP generated and sent to email successfully.",
+        email=payload.email,
+        expires_in_seconds=600,
+    )
 
 
 async def handle_verify_otp(

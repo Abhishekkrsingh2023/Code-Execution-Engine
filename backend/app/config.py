@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     REDIS_REFRESH_TOKEN_PREFIX: str = "refresh_token:"
     REDIS_REVOKED_TOKEN_PREFIX: str = "revoked_token:"
 
+    # Resend Config variables
+    RESEND_API_KEY: str = ""
+    FROM_EMAIL: str = "codersclub@bbitclub.io"
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
