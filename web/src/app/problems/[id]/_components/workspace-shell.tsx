@@ -5,13 +5,15 @@ import Image from "next/image";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { ProblemDescription } from "./problem-description";
+import { ProblemSubmissions } from "./problem-submissions";
 import { MonacoCodeEditor } from "./monaco-code-editor";
 import { TestcasePanel } from "./testcase-panel";
 import { ResultPanel } from "./result-panel";
 import { GuestLoginModal } from "./guest-login-modal";
 import type { FullProblemResponse } from "@/types/problem";
 import type { SupportedLanguage, SubmissionPollResponse } from "@/types/execution";
-import { Play, Send, RotateCcw, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import type { UserResponse } from "@/types/user";
+import { Play, Send, RotateCcw, ChevronDown, ChevronUp, Loader2, FileText, History } from "lucide-react";
 
 export const DEFAULT_TEMPLATES: Record<SupportedLanguage, string> = {
   python: `def solve():\n    # Read input from standard input\n    # Write your solution here\n    pass\n\nif __name__ == "__main__":\n    solve()\n`,
@@ -43,12 +45,14 @@ function getStarterCode(lang: SupportedLanguage, problemData: FullProblemRespons
 interface WorkspaceShellProps {
   problemData: FullProblemResponse;
   isAuthenticated: boolean;
+  currentUser?: UserResponse | null;
   problemId: number;
 }
 
 export function WorkspaceShell({
   problemData,
   isAuthenticated,
+  currentUser,
   problemId,
 }: WorkspaceShellProps) {
   const [language, setLanguage] = useState<SupportedLanguage>("python");
@@ -64,13 +68,17 @@ export function WorkspaceShell({
   });
   const [customInput, setCustomInput] = useState<string>("");
 
+  // Left panel tabs (Description vs Submissions)
+  const [activeLeftTab, setActiveLeftTab] = useState<"description" | "submissions">("description");
+  const [submissionsRefreshTrigger, setSubmissionsRefreshTrigger] = useState<number>(0);
+
   // Bottom panel tabs & collapse
   const [activeBottomTab, setActiveBottomTab] = useState<"testcases" | "result">("testcases");
   const [activeTestcaseTab, setActiveTestcaseTab] = useState<"sample" | "custom">("sample");
   const [bottomPanelCollapsed, setBottomPanelCollapsed] = useState<boolean>(false);
 
   // Mobile layout tabs (< lg)
-  const [mobileTab, setMobileTab] = useState<"problem" | "code" | "output">("problem");
+  const [mobileTab, setMobileTab] = useState<"problem" | "submissions" | "code" | "output">("problem");
 
   // Execution state
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
@@ -110,18 +118,21 @@ export function WorkspaceShell({
     };
   }, [cleanupPolling]);
 
-  const handleLanguageChange = (newLang: SupportedLanguage) => {
-    setLanguage(newLang);
-    if (typeof window !== "undefined") {
-      const draftKey = `code0_draft_${problemId}_${newLang}`;
-      const saved = localStorage.getItem(draftKey);
-      if (saved !== null && saved.trim() !== "") {
-        setCode(saved);
-        return;
+  const handleLanguageChange = useCallback(
+    (newLang: SupportedLanguage) => {
+      setLanguage(newLang);
+      if (typeof window !== "undefined") {
+        const draftKey = `code0_draft_${problemId}_${newLang}`;
+        const saved = localStorage.getItem(draftKey);
+        if (saved !== null && saved.trim() !== "") {
+          setCode(saved);
+          return;
+        }
       }
-    }
-    setCode(getStarterCode(newLang, problemData));
-  };
+      setCode(getStarterCode(newLang, problemData));
+    },
+    [problemData, problemId]
+  );
 
   // Save draft on edit
   const handleCodeChange = (newCode: string) => {
@@ -170,6 +181,9 @@ export function WorkspaceShell({
           setIsExecuting(false);
           setExecStatus(st);
           setExecResult(data);
+          if (mode === "submit") {
+            setSubmissionsRefreshTrigger((prev) => prev + 1);
+          }
         } else {
           setExecStatus(st || "running");
         }
@@ -178,6 +192,19 @@ export function WorkspaceShell({
       }
     }, 1200);
   }, [cleanupPolling]);
+
+  // Load a past submission into the editor
+  const handleLoadPastCode = useCallback(
+    (pastCode: string, pastLang: SupportedLanguage) => {
+      handleLanguageChange(pastLang);
+      setCode(pastCode);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`code0_draft_${problemId}_${pastLang}`, pastCode);
+      }
+      setMobileTab("code");
+    },
+    [handleLanguageChange, problemId]
+  );
 
   // Trigger Run or Submit
   const handleExecute = async (mode: "run" | "submit") => {
@@ -292,6 +319,17 @@ export function WorkspaceShell({
           </button>
           <button
             type="button"
+            onClick={() => setMobileTab("submissions")}
+            className={`px-3 py-1 rounded text-xs font-medium cursor-pointer ${
+              mobileTab === "submissions"
+                ? "bg-[var(--accent)] text-[var(--foreground)] font-semibold"
+                : "text-[var(--muted-foreground)]"
+            }`}
+          >
+            Submissions
+          </button>
+          <button
+            type="button"
             onClick={() => setMobileTab("code")}
             className={`px-3 py-1 rounded text-xs font-medium cursor-pointer ${
               mobileTab === "code"
@@ -338,10 +376,51 @@ export function WorkspaceShell({
       {/* Desktop Workspace Split (lg and up) */}
       <div className="hidden lg:flex flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal" autoSaveId="code0_problem_split_h">
-          {/* Left Panel: Problem Statement */}
+          {/* Left Panel: Problem Statement & Submissions */}
           <ResizablePanel defaultSize={42} minSize={25} maxSize={65}>
-            <div className="h-full border-r border-[var(--border)] bg-[var(--card)] overflow-hidden">
-              <ProblemDescription data={problemData} />
+            <div className="h-full border-r border-[var(--border)] bg-[var(--card)] flex flex-col overflow-hidden">
+              {/* Left Panel Tabs Header */}
+              <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--border)] bg-[var(--card)] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveLeftTab("description")}
+                  className={`px-3 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    activeLeftTab === "description"
+                      ? "bg-[var(--muted)] text-[var(--foreground)]"
+                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Description</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveLeftTab("submissions")}
+                  className={`px-3 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    activeLeftTab === "submissions"
+                      ? "bg-[var(--muted)] text-[var(--foreground)]"
+                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Submissions</span>
+                </button>
+              </div>
+
+              {/* Left Panel Tab Content */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {activeLeftTab === "description" ? (
+                  <ProblemDescription data={problemData} />
+                ) : (
+                  <ProblemSubmissions
+                    problemId={problemData.problem.id}
+                    user={currentUser ?? null}
+                    refreshTrigger={submissionsRefreshTrigger}
+                    onLoadCode={handleLoadPastCode}
+                  />
+                )}
+              </div>
             </div>
           </ResizablePanel>
 
@@ -514,8 +593,19 @@ export function WorkspaceShell({
       {/* Mobile Stacked View (< lg) */}
       <div className="lg:hidden flex-1 overflow-hidden flex flex-col">
         {mobileTab === "problem" && (
-          <div className="flex-1 overflow-y-auto bg-[var(--card)]">
+          <div className="flex-1 min-h-0 overflow-y-auto bg-[var(--card)]">
             <ProblemDescription data={problemData} />
+          </div>
+        )}
+
+        {mobileTab === "submissions" && (
+          <div className="flex-1 min-h-0 overflow-y-auto bg-[var(--card)]">
+            <ProblemSubmissions
+              problemId={problemData.problem.id}
+              user={currentUser ?? null}
+              refreshTrigger={submissionsRefreshTrigger}
+              onLoadCode={handleLoadPastCode}
+            />
           </div>
         )}
 

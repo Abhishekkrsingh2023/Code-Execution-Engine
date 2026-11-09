@@ -54,3 +54,38 @@ export interface SubmissionPollResponse {
   total_tests?: number;
 }
 
+export interface UserSubmissionItem {
+  id: string; // UUID
+  user_id?: string | null;
+  problem_id: number | null;
+  problem_name: string | null;
+  language: SupportedLanguage | string;
+  status:
+    | "accepted"
+    | "wrong_answer"
+    | "time_limit_exceeded"
+    | "memory_limit_exceeded"
+    | "compilation_error"
+    | "runtime_error"
+    | "queued"
+    | "running"
+    | "pending"
+    | string;
+  score: number;
+  max_score: number;
+  tests_passed: number;
+  total_tests: number;
+  execution_time: number | null;
+  memory_used: number | null;
+  source_code?: string | null;
+  created_at: string;
+}
+
+export interface UserSubmissionListResponse {
+  total: number;
+  skip: number;
+  limit: number;
+  submissions: UserSubmissionItem[];
+}
+
+

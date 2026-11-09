@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getMyLeaderboardRank } from "@/lib/api/leaderboard";
+import { getMySubmissions } from "@/lib/api/submissions";
 import { ProfileEditForm } from "./_components/profile-edit-form";
+import { SubmissionsHistory } from "./_components/submissions-history";
 import { Footer } from "@/components/shared/footer";
 import { Trophy, CheckCircle, Award, CheckCircle2, Shield, Calendar } from "lucide-react";
 
@@ -18,6 +20,12 @@ export default async function ProfilePage() {
   }
 
   const rankData = await getMyLeaderboardRank();
+  const submissionsData = await getMySubmissions({ limit: 50 }).catch(() => ({
+    total: 0,
+    skip: 0,
+    limit: 50,
+    submissions: [],
+  }));
 
   const memberSince = user.created_at
     ? new Date(user.created_at).toLocaleDateString("en-US", {
@@ -107,12 +115,18 @@ export default async function ProfilePage() {
               <Award className="w-4 h-4 text-[var(--muted-foreground)]" />
             </div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-[var(--foreground)]">
-              {rankData?.submissions_count ?? 0}
+              {rankData?.submissions_count ?? submissionsData.total ?? 0}
             </div>
             <span className="text-[10px] text-[var(--muted-foreground)] mt-1">Official evaluations attempted</span>
           </div>
         </div>
       </div>
+
+      {/* Submission History Section */}
+      <SubmissionsHistory
+        initialSubmissions={submissionsData.submissions}
+        total={submissionsData.total}
+      />
 
       {/* Edit Profile Section */}
       <ProfileEditForm user={user} />

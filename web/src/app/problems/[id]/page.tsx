@@ -60,6 +60,7 @@ export default async function ProblemDetailPage(props: ProblemDetailPageProps) {
     <WorkspaceShell
       problemData={problemData}
       isAuthenticated={isAuthenticated}
+      currentUser={user}
       problemId={problemId}
     />
   );

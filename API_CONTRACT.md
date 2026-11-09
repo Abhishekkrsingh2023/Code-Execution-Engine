@@ -72,6 +72,10 @@ The frontend utilizes SSE (`EventSource`) with automatic fallback to polling if 
 | `GET` | `/api-v1/code/submission/poll/{submission_id}` | No | Any | None | JSON Dict (`status, output, error, results, time_taken, score, max_score, tests_passed, total_tests`) | `404 Not Found` |
 | `GET` | `/api-v1/leaderboard` | Optional | Any | Query: `skip`, `limit` | `LeaderboardResponse` (`{ total, skip, limit, users: [LeaderboardEntryResponse], my_rank: LeaderboardEntryResponse \| null }`) | `422` |
 | `GET` | `/api-v1/leaderboard/me` | Yes | Active User | None | `LeaderboardEntryResponse` (`{ rank, user_id, username, total_score, problems_solved, submissions_count, created_at }`) | `401`, `404` |
+| `GET` | `/api-v1/users/me/submissions` | Yes | Active User | Query: `skip`, `limit`, `problem_id`, `status` | `UserSubmissionListResponse` (`{ total, skip, limit, submissions: [UserSubmissionResponse] }`) | `401` |
+| `GET` | `/api-v1/users/me/submissions/{submission_id}` | Yes | Active User | Path: `submission_id: UUID` | `UserSubmissionResponse` (`{ id, problem_id, problem_name, language, status, score, max_score, tests_passed, total_tests, execution_time, memory_used, source_code, created_at }`) | `401`, `404` |
+| `GET` | `/api-v1/code/submissions/me` | Yes | Active User | Query: `skip`, `limit`, `problem_id`, `status` | `UserSubmissionListResponse` (alias) | `401` |
+| `GET` | `/api-v1/code/submissions/{submission_id}` | Yes | Active User | Path: `submission_id: UUID` | `UserSubmissionResponse` (alias) | `401`, `404` |
 | `GET` | `/api-v1/admin/users` | Yes | Admin | Query: `skip`, `limit`, `role`, `status`, `search` | `AdminUserListResponse` (`{ total, skip, limit, users: [AdminUserResponse] }`) | `401`, `403`, `422` |
 | `GET` | `/api-v1/admin/users/{user_id}` | Yes | Admin | None | `AdminUserDetailResponse` (`...AdminUserResponse, recent_submissions: list[dict], recent_audit_actions: list[dict]`) | `401`, `403`, `404` |
 | `PATCH` | `/api-v1/admin/users/{user_id}/role` | Yes | Admin | `AdminUpdateUserRoleRequest` (`role: UserRole`) | `AdminUserResponse` | `401`, `403`, `404`, `422` |
@@ -116,10 +120,8 @@ The following features were specified in the frontend requirements but currently
 - **Supported Fields**: `name`, `username`, `email`, `password`, and optional `current_password` for password verification.
 
 ### 2. User Submission History ("My Submissions")
-- **Missing Endpoints**:
-  - `GET /api-v1/users/me/submissions` (to list paginated historical submissions of the logged-in user with status, score, timestamp, language, code, and test case results)
-  - `GET /api-v1/code/submissions/{submission_id}` (to view a specific past submission code & verdict)
-- **Frontend Action**: Built on `/profile` with a full-featured submissions table component displaying recent session submissions (persisted in client storage / state for submissions run during the user session), and ready to connect to `GET /api-v1/users/me/submissions`.
+- **Status**: Implemented via `GET /api-v1/users/me/submissions` (and aliased at `GET /api-v1/code/submissions/me`) with pagination (`skip`, `limit`), problem filtering (`problem_id`), status filtering (`status`), and single submission inspection via `GET /api-v1/users/me/submissions/{submission_id}`.
+- **Frontend Action**: Built on `/profile` with a full-featured submissions history table, code inspection drawer, and inside the problem workspace left panel under the "Submissions" tab.
 
 ### 3. Global Submissions List for Admin
 - **Missing Endpoint**:
