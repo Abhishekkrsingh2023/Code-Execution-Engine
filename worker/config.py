@@ -26,6 +26,7 @@ class WorkerSettings(BaseSettings):
     # Code Execution and Storage
     CODE_BASE_DIR: str | None = None
     HOST_CODE_BASE_DIR: str | None = None
+    DOCKER_HOST: str | None = None
 
     # Sandbox Docker Container Limits & Images
     CONTAINER_MEMORY_LIMIT: str = "256m"

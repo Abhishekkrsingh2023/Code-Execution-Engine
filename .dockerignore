@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+logs/
+.pytest_cache
+.ruff_cache
+.mypy_cache
+admin/node_modules
+admin/.next
+web/node_modules
+web/.next
+backend/.venv
+backend/code
+worker/.venv

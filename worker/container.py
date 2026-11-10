@@ -1,5 +1,14 @@
 # Manages Docker containers for sandboxed code execution.
+import os
 import subprocess
+
+try:
+    from worker.config import settings
+except ImportError:
+    from config import settings
+
+if settings.DOCKER_HOST:
+    os.environ["DOCKER_HOST"] = settings.DOCKER_HOST
 
 LANGUAGES_TO_COMPILE = ["java", "c", "cpp"]
 
@@ -60,7 +69,7 @@ class DockerContainerEngine:
                 "-J-XX:+UseSerialGC",
                 "-J-Xms16m",
                 "-J-Xmx128m",
-                f"/shared/{folder_name}/Main.java",
+                f"/app/code/{folder_name}/Main.java",
             ]
         elif language == "cpp":
             return [
@@ -69,9 +78,9 @@ class DockerContainerEngine:
                 "-i",
                 self.container_id,
                 "g++",
-                f"/shared/{folder_name}/Main.cpp",
+                f"/app/code/{folder_name}/Main.cpp",
                 "-o",
-                f"/shared/{folder_name}/a.out",
+                f"/app/code/{folder_name}/a.out",
             ]
         elif language == "c":
             return [
@@ -80,9 +89,9 @@ class DockerContainerEngine:
                 "-i",
                 self.container_id,
                 "gcc",
-                f"/shared/{folder_name}/Main.c",
+                f"/app/code/{folder_name}/Main.c",
                 "-o",
-                f"/shared/{folder_name}/a.out",
+                f"/app/code/{folder_name}/a.out",
             ]
         else:
             raise ValueError(f"Unsupported language for compilation: {language}")
@@ -101,12 +110,13 @@ class DockerContainerEngine:
                 "-XX:+UseSerialGC",
                 "-Xms16m",
                 "-Xmx128m",
+                "-Duser.home=/tmp",
                 "-cp",
-                f"/shared/{folder_name}",
+                f"/app/code/{folder_name}",
                 "Main",
             ]
         elif language in ["c", "cpp"]:
-            return ["docker", "exec", "-i", self.container_id, f"/shared/{folder_name}/a.out"]
+            return ["docker", "exec", "-i", self.container_id, f"/app/code/{folder_name}/a.out"]
         elif language == "python":
             return [
                 "docker",
@@ -114,7 +124,8 @@ class DockerContainerEngine:
                 "-i",
                 self.container_id,
                 "python",
-                f"/shared/{folder_name}/Main.py",
+                "-B",
+                f"/app/code/{folder_name}/Main.py",
             ]
         else:
             raise ValueError(f"Unsupported language for execution: {language}")
@@ -136,7 +147,7 @@ class DockerContainerEngine:
     def start_container(self, folder_name: str) -> str:
         """
         Start a long-running ``sleep infinity`` container with the submission's
-        source directory mounted read-write at ``/shared/<folder_name>``.
+        source directory mounted read-write at ``/app/code/<folder_name>``.
 
         Only the specific submission subfolder is mounted — containers cannot
         access each other's source files.
@@ -152,6 +163,7 @@ class DockerContainerEngine:
                 "docker",
                 "run",
                 "-d",
+                "--rm",
                 "--network",
                 "none",
                 "--memory",
@@ -162,14 +174,20 @@ class DockerContainerEngine:
                 str(self.pids_limit),  # Security: cap process count to defeat fork bombs
                 "--security-opt",
                 "no-new-privileges",  # Security: block setuid / capability escalation
+                "--cap-drop",
+                "ALL",
+                "--read-only",
+                "--tmpfs",
+                "/tmp:rw,noexec,nosuid,size=64m",
+                "--user",
+                "1000:1000",
             ]
 
             if self.volume_mount and folder_name:
-                # Mount ONLY this submission's subdirectory, not the entire
-                # shared code root, so containers are isolated from each other.
+                # Mount ONLY this submission's subdirectory under /app/code
                 host_path = f"{self.volume_mount}/{folder_name}"
-                container_path = f"/shared/{folder_name}"
-                command.extend(["-v", f"{host_path}:{container_path}"])
+                container_path = f"/app/code/{folder_name}"
+                command.extend(["-v", f"{host_path}:{container_path}:rw"])
 
             command.extend([self.image_name, "sleep", "infinity"])
 
@@ -182,14 +200,16 @@ class DockerContainerEngine:
     def remove_container(self) -> None:
         """Force-remove the container. Safe to call even if already removed."""
         if self.container_id:
+            cid = self.container_id
+            self.container_id = None
             try:
                 subprocess.run(
-                    ["docker", "rm", "-f", self.container_id],
+                    ["docker", "rm", "-f", cid],
                     capture_output=True,
                     text=True,
                 )
             except Exception as e:
-                print(f"Error removing container {self.container_id}: {e}")
+                print(f"Error removing container {cid}: {e}")
 
     def compile_code(self, language: str, folder_name: str) -> dict:
         """

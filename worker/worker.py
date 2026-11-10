@@ -145,10 +145,18 @@ def compile_and_run_code(submission_data: dict) -> dict:
     # Ensure code file exists in submission directory in case worker runs independently
     submission_dir = CODE_BASE / submission_id
     submission_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        submission_dir.chmod(0o777)
+    except OSError:
+        pass
     ext = EXTENSION_MAP.get(language, "txt")
     code_file = submission_dir / f"Main.{ext}"
     if not code_file.exists() and user_code:
         code_file.write_text(user_code, encoding="utf-8")
+        try:
+            code_file.chmod(0o666)
+        except OSError:
+            pass
 
     # Add a small grace period on top of declared limit so Docker exec overhead doesn't count against user
     exec_timeout = time_limit + 2.0

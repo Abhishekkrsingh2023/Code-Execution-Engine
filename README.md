@@ -646,6 +646,104 @@ For complete details on test architecture, fixtures, and coverage, see [tests/RE
 
 ---
 
+## 🐳 Production Containerization & Deployment
+
+Code0 is fully containerized with a hardened, production-ready Docker Compose architecture featuring Docker-in-Docker (DinD) sandbox isolation, Nginx reverse proxy with automated Let's Encrypt SSL, and zero public exposure of database or execution daemons.
+
+### Architecture Overview
+
+```
+                      ┌───────────────────────────────────────────────┐
+                      │              Host Server / Nginx              │
+                      │  (network_mode: host, ports 80 & 443 public)  │
+                      └───────┬───────────────────────────────┬───────┘
+                              │                               │
+             https://code0.bbitclub.io               https://admin.bbit.io
+             (and /api-v1/ on both)                  (and /api-v1/ on both)
+                              │                               │
+                      ┌───────┴──────┐                ┌───────┴──────┐
+                      │  web (Next)  │                │ admin (Next) │
+                      │ 127.0.0.1:3000│               │127.0.0.1:3001│
+                      └───────┬──────┘                └───────┬──────┘
+                              │                               │
+                              └───────────────┬───────────────┘
+                                              ▼
+                                   ┌──────────────────────┐
+                                   │   backend (FastAPI)  │
+                                   │    127.0.0.1:8000    │
+                                   └──────────┬───────────┘
+                                              │
+                     ┌────────────────────────┼────────────────────────┐
+                     ▼                        ▼                        ▼
+              ┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+              │   postgres   │         │    redis     │         │    worker    │
+              │  (no ports)  │         │  (no ports)  │         │  (no ports)  │
+              └──────────────┘         └──────────────┘         └──────┬───────┘
+                                                                       │ (DOCKER_HOST)
+                                                                       ▼
+                                                                ┌──────────────┐
+                                                                │     dind     │
+                                                                │  (no ports)  │
+                                                                └──────────────┘
+```
+
+### Exact Deployment Steps (In Order)
+
+#### Step 1: Configure Environment Variables
+Copy `.env.example` to `.env` and fill in secrets and production URLs:
+```bash
+cp .env.example .env
+# Edit .env with your favorite editor (e.g. nano .env)
+# Set a strong JWT_SECRET_KEY, POSTGRES_PASSWORD, and SSL_EMAIL
+```
+
+#### Step 2: Validate Docker Compose Configuration
+```bash
+docker compose config
+```
+
+#### Step 3: Build All Container Images
+Build the multi-stage images for `admin`, `web`, `backend`, and `worker`:
+```bash
+docker compose build
+```
+
+#### Step 4: Obtain SSL Certificates (First-Time Setup)
+Run the automated one-shot certificate initialization script:
+```bash
+# Test with Let's Encrypt Staging first (avoids production rate limits):
+./init-letsencrypt.sh --staging
+
+# Once validated, run for production certificates:
+./init-letsencrypt.sh
+```
+
+#### Step 5: Start All Services in Background
+```bash
+docker compose up -d
+```
+
+#### Step 6: Verify Deployment & Health
+Check container health statuses:
+```bash
+docker compose ps
+```
+
+Verify services respond on loopback:
+```bash
+curl -I http://127.0.0.1:3000   # Web frontend
+curl -I http://127.0.0.1:3001   # Admin frontend
+curl -I http://127.0.0.1:8000/health # Backend API
+```
+
+Verify that internal database and execution ports are **not** publicly exposed:
+```bash
+ss -tlnp | grep -E '(5432|6379|2375)'
+# Should return nothing on 0.0.0.0 or public IP interfaces!
+```
+
+---
+
 ## 👤 Author
 
 Developed by **Abhishek** ([@Abhishekkrsingh2023](https://github.com/Abhishekkrsingh2023)).

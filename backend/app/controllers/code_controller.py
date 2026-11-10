@@ -212,8 +212,16 @@ async def handle_code_execution_request(
     try:
         # ── Disk first: the worker must find the file when it pops the job ──
         submission_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            submission_dir.chmod(0o777)
+        except OSError:
+            pass
         async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
             await f.write(submission.user_code)
+        try:
+            file_path.chmod(0o666)
+        except OSError:
+            pass
 
         # ── Redis: one round trip, atomic (all commands apply or none) ──────
         async with redis_client.pipeline(transaction=True) as pipe:

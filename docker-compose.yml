@@ -3,81 +3,195 @@ services:
     image: postgres:18
     container_name: postgres
     restart: unless-stopped
+    env_file: .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: code_buddy
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-code_buddy}
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d code_buddy" ]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-code_buddy}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: "1G"
-        reservations:
-          cpus: "0.5"
-          memory: "512M"
 
   redis:
     image: redis:8-alpine
     container_name: redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    env_file: .env
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    command: >
-      redis-server --appendonly yes
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: "1G"
-        reservations:
-          cpus: "0.5"
-          memory: "256M"
 
-  # worker:
-  #   build:
-  #     context: ./worker
-  #     dockerfile: Dockerfile
-  #   container_name: code_executor_worker
-  #   restart: unless-stopped
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   environment:
-  #     REDIS_HOST: redis
-  #     REDIS_PORT: 6379
-  #     DATABASE_URL: postgresql+psycopg://postgres:password@postgres:5432/code_buddy
-  #     CODE_BASE_DIR: /code
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #     - code_data:/code
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: "1"
-  #         memory: "2G"
-  #       reservations:
-  #         cpus: "0.5"
-  #         memory: "512M"
+  dind:
+    image: docker:27.5-dind
+    container_name: dind
+    restart: unless-stopped
+    privileged: true
+    env_file: .env
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - dind_data:/var/lib/docker
+      - ./backend/code:/app/code
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-code_buddy}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CODE_BASE_DIR=/app/code
+    volumes:
+      - ./backend/code:/app/code
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-code_buddy}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CODE_BASE_DIR=/app/code
+      - DOCKER_HOST=tcp://dind:2375
+    volumes:
+      - ./backend/code:/app/code
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      dind:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; from config import settings; sys.exit(0)"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-http://backend:8000}
+        SERVER_ACTIONS_ALLOWED_ORIGINS: ${SERVER_ACTIONS_ALLOWED_ORIGINS:-localhost:3001,127.0.0.1:3001,admin.bbit.io}
+    container_name: admin
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - API_BASE_URL=http://backend:8000
+      - SERVER_ACTIONS_ALLOWED_ORIGINS=localhost:3001,127.0.0.1:3001,admin.bbit.io
+      - PORT=3001
+      - HOSTNAME=0.0.0.0
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3001 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-http://backend:8000}
+        SERVER_ACTIONS_ALLOWED_ORIGINS: ${SERVER_ACTIONS_ALLOWED_ORIGINS:-localhost:3000,127.0.0.1:3000,code0.bbitclub.io}
+    container_name: web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - API_BASE_URL=http://backend:8000
+      - SERVER_ACTIONS_ALLOWED_ORIGINS=localhost:3000,127.0.0.1:3000,code0.bbitclub.io
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    command: >
+      /bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload || true; done & exec nginx -g "daemon off;"'
+    depends_on:
+      backend:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+
+  certbot:
+    image: certbot/certbot:v3.2.0
+    container_name: certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: >
+      /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'
 
 volumes:
   postgres_data:
   redis_data:
-  # code_data:
+  certbot_conf:
+  certbot_www:
+  dind_data:
